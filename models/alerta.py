@@ -1,109 +1,95 @@
 # ==============================
-# MODELO CATEGORÍA
+# MODELO ALERTA
 # ==============================
 
-class Categoria:
+from database.conexion import conectar_bd
+
+class Alerta:
     """
-    Esta clase representa una categoría de productos.
-
-    Las categorías sirven para organizar los productos
-    dentro del sistema de inventario.
-
-    Ejemplo:
-    - Cuadernos
-    - Plumas
-    - Hojas
-    - Material de oficina
+    Modelo que representa la tabla 'alerta' en la base de datos.
+    Se encarga de gestionar las notificaciones cuando los productos 
+    llegan a su stock mínimo.
     """
 
-    def __init__(self, id_categoria=None, nombre="", descripcion=""):
-        """
-        Este método se ejecuta automáticamente cuando se crea un objeto Categoria.
-
-        Parámetros:
-        id_categoria: Identificador único de la categoría.
-        nombre: Nombre de la categoría.
-        descripcion: Breve descripción de la categoría.
-        """
-
-        # Guardamos el id de la categoría.
-        # Puede ser None si todavía no se guarda en la base de datos.
-        self.id_categoria = id_categoria
-
-        # Guardamos el nombre de la categoría.
-        self.nombre = nombre
-
-        # Guardamos una descripción breve de la categoría.
-        self.descripcion = descripcion
+    def __init__(self, id_alerta=None, id_producto=None, mensaje="", atendida=0):
+        # Atributos de la clase que coinciden con las columnas de la tabla en SQLite.
+        self.id_alerta = id_alerta
+        self.id_producto = id_producto
+        self.mensaje = mensaje
+        self.atendida = atendida
 
     # ==============================
-    # MOSTRAR INFORMACIÓN
+    # MÉTODO: CREAR ALERTA
     # ==============================
-
-    def mostrar_informacion(self):
+    @staticmethod
+    def generar_alerta_stock_bajo(id_producto, mensaje):
         """
-        Este método devuelve la información de la categoría
-        en forma de diccionario.
-
-        Sirve para mostrar los datos de forma ordenada.
+        Inserta una nueva alerta en la base de datos cuando un producto tiene poco stock.
         """
-
-        return {
-            "id_categoria": self.id_categoria,
-            "nombre": self.nombre,
-            "descripcion": self.descripcion
-        }
-
-    # ==============================
-    # VALIDAR DATOS
-    # ==============================
-
-    def validar_datos(self):
-        """
-        Este método revisa que la categoría tenga
-        al menos un nombre registrado.
-
-        Retorna True si el nombre está completo.
-        Retorna False si el nombre está vacío.
-        """
-
-        # Validamos que el nombre no esté vacío.
-        if self.nombre == "":
-            return False
-
-        return True
+        conexion = conectar_bd()
+        cursor = conexion.cursor()
+        
+        try:
+            # Insertamos la alerta. Por defecto, 'atendida' es 0 (Falso) en la base de datos.
+            cursor.execute("""
+                INSERT INTO alerta (id_producto, mensaje, atendida)
+                VALUES (?, ?, 0)
+            """, (id_producto, mensaje))
+            
+            conexion.commit()
+            print(f"Alerta generada para el producto ID {id_producto}.")
+        except Exception as e:
+            print("Error al generar la alerta:", e)
+        finally:
+            conexion.close()
 
     # ==============================
-    # ACTUALIZAR NOMBRE
+    # MÉTODO: OBTENER ALERTAS PENDIENTES
     # ==============================
-
-    def actualizar_nombre(self, nuevo_nombre):
+    @staticmethod
+    def obtener_alertas_pendientes():
         """
-        Este método permite cambiar el nombre de la categoría.
-
-        Parámetro:
-        nuevo_nombre: Nuevo nombre que tendrá la categoría.
+        Recupera todas las alertas que aún no han sido leídas o atendidas.
+        Hace un JOIN con la tabla 'producto' para traer también el nombre del artículo.
         """
-
-        # Verificamos que el nuevo nombre no esté vacío.
-        if nuevo_nombre != "":
-            self.nombre = nuevo_nombre
-            return True
-
-        return False
+        conexion = conectar_bd()
+        cursor = conexion.cursor()
+        
+        # Seleccionamos información cruzando la tabla alerta y producto
+        cursor.execute("""
+            SELECT a.id_alerta, p.nombre, a.mensaje 
+            FROM alerta a
+            INNER JOIN producto p ON a.id_producto = p.id_producto
+            WHERE a.atendida = 0
+        """)
+        
+        alertas = cursor.fetchall()
+        conexion.close()
+        
+        return alertas
 
     # ==============================
-    # ACTUALIZAR DESCRIPCIÓN
+    # MÉTODO: MARCAR COMO LEÍDA/ATENDIDA
     # ==============================
-
-    def actualizar_descripcion(self, nueva_descripcion):
+    @staticmethod
+    def marcar_como_leida(id_alerta):
         """
-        Este método permite cambiar la descripción de la categoría.
-
-        Parámetro:
-        nueva_descripcion: Nueva descripción de la categoría.
+        Actualiza el estado de una alerta en específico para marcarla como solucionada.
+        Cambia el valor de 'atendida' de 0 a 1.
         """
-
-        # Guardamos la nueva descripción.
-        self.descripcion = nueva_descripcion
-        return True
+        conexion = conectar_bd()
+        cursor = conexion.cursor()
+        
+        try:
+            cursor.execute("""
+                UPDATE alerta
+                SET atendida = 1
+                WHERE id_alerta = ?
+            """, (id_alerta,))
+            
+            conexion.commit()
+            print(f"Alerta ID {id_alerta} marcada como atendida.")
+        except Exception as e:
+            print("Error al actualizar la alerta:", e)
+        finally:
+            conexion.close()
