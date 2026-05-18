@@ -1,5 +1,5 @@
 # ==============================
-# auth_service.py
+# SERVICIO DE AUTENTICACION
 # ==============================
 
 from controllers.usuario_controller import UsuarioController
