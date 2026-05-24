@@ -1,287 +1,333 @@
 # ==============================
-#  SERVICIO DE VENTAS
+# SERVICIO DE VENTAS
 # ==============================
 
+"""
+Este archivo contiene la lógica principal para procesar ventas.
+
+El service se encarga de:
+- Validar que la venta tenga productos.
+- Validar cantidades.
+- Validar precios.
+- Verificar stock disponible.
+- Calcular el total de la venta.
+- Mandar la venta al controlador para guardarla en la base de datos.
+
+Este archivo no dibuja pantallas.
+Solo maneja lógica del sistema.
+"""
+
+import sqlite3
+
+from database.conexion import conectar_bd
 from controllers.venta_controller import VentaController
-from controllers.producto_controller import ProductoController
 from controllers.inventario_controller import InventarioController
-from controllers.alerta_controller import AlertaController
-from datetime import datetime
+from utils.validaciones import es_numero, es_entero
 
 
 class VentaService:
     """
     Servicio de ventas.
 
-    Este servicio se encarga de la lógica de negocio relacionada
-    con las ventas.
-
-    Se encarga de:
-    - Procesar una venta completa con múltiples productos
-    - Calcular totales y subtotales
-    - Verificar stock antes de vender
-    - Actualizar inventario automáticamente
-    - Generar alertas si hay productos con stock bajo
-    - Registrar la venta y sus detalles
-
-    Este servicio utiliza VentaController, ProductoController,
-    InventarioController y AlertaController.
+    Esta clase funciona como una capa intermedia entre la interfaz
+    y el controlador de ventas.
     """
 
     def __init__(self):
         """
-        Este método se ejecuta automáticamente cuando se crea un objeto VentaService.
-
-        Crea las instancias de los controladores necesarios.
+        Al iniciar el servicio, se crean los controladores necesarios.
         """
 
-        # Creamos las instancias de los controladores.
         self.venta_controller = VentaController()
-        self.producto_controller = ProductoController()
         self.inventario_controller = InventarioController()
-        self.alerta_controller = AlertaController()
 
     # ==============================
-    # PROCESAR VENTA COMPLETA
+    # OBTENER PRECIO DE PRODUCTO
     # ==============================
 
-    def procesar_venta(self, carrito, metodo_pago, id_usuario):
+    def obtener_precio_producto(self, id_producto):
         """
-        Este método procesa una venta completa.
-
-        Parámetros:
-        carrito: Lista de diccionarios con productos del carrito.
-                 Cada diccionario debe tener: id_producto, cantidad, precio
-        metodo_pago: Método de pago (Efectivo, Tarjeta, Transferencia)
-        id_usuario: Identificador del usuario que realiza la venta.
-
-        Retorna:
-        Tupla (éxito, mensaje, id_venta)
-        """
-
-        # Validamos que el carrito no esté vacío.
-        if not carrito or len(carrito) == 0:
-            return False, "El carrito está vacío", None
-
-        # Validamos que haya un método de pago.
-        if not metodo_pago:
-            return False, "Debe seleccionar un método de pago", None
-
-        try:
-            # Variable para almacenar el total de la venta.
-            total_venta = 0.0
-
-            # Lista para guardar los detalles que se registrarán.
-            detalles = []
-
-            # ==============================
-            # PRIMERO: VERIFICAR STOCK DE TODOS LOS PRODUCTOS
-            # ==============================
-
-            for item in carrito:
-                id_producto = item["id_producto"]
-                cantidad = item["cantidad"]
-
-                # Verificamos stock disponible.
-                stock_actual = self.inventario_controller.obtener_stock(id_producto)
-
-                if stock_actual < cantidad:
-                    # Obtenemos el nombre del producto para el mensaje.
-                    producto = self.producto_controller.buscar_por_id(id_producto)
-                    nombre_producto = producto.nombre if producto else f"ID {id_producto}"
-
-                    return False, f"Stock insuficiente para '{nombre_producto}'. Disponible: {stock_actual}", None
-
-            # ==============================
-            # SEGUNDO: CALCULAR TOTAL Y PREPARAR DETALLES
-            # ==============================
-
-            for item in carrito:
-                id_producto = item["id_producto"]
-                cantidad = item["cantidad"]
-                precio_unitario = item["precio"]
-                subtotal = cantidad * precio_unitario
-
-                total_venta += subtotal
-
-                detalles.append({
-                    "id_producto": id_producto,
-                    "cantidad": cantidad,
-                    "precio_unitario": precio_unitario,
-                    "subtotal": subtotal
-                })
-
-            # ==============================
-            # TERCERO: REGISTRAR LA VENTA
-            # ==============================
-
-            # Preparamos los productos para el controlador (formato compatible).
-            productos_venta = []
-
-            for item in carrito:
-                productos_venta.append({
-                    "id_producto": item["id_producto"],
-                    "cantidad": item["cantidad"],
-                    "precio": item["precio"]
-                })
-
-            # Registramos la venta usando el controlador.
-            exito = self.venta_controller.registrar_venta(productos_venta, total_venta)
-
-            if not exito:
-                return False, "Error al registrar la venta en la base de datos", None
-
-            # Obtenemos el ID de la última venta (para mostrar al usuario).
-            ultimas_ventas = self.venta_controller.obtener_ventas()
-            id_venta = ultimas_ventas[0][0] if ultimas_ventas else None
-
-            # ==============================
-            # CUARTO: VERIFICAR ALERTAS DE STOCK BAJO
-            # ==============================
-
-            for item in carrito:
-                id_producto = item["id_producto"]
-                cantidad = item["cantidad"]
-
-                # Obtenemos el stock actual después de la venta.
-                stock_actual = self.inventario_controller.obtener_stock(id_producto)
-
-                # Obtenemos el producto para conocer su stock mínimo.
-                producto = self.producto_controller.buscar_por_id(id_producto)
-
-                if producto and stock_actual <= producto.stock_minimo:
-                    # Generamos mensaje de alerta.
-                    if stock_actual <= 0:
-                        mensaje = f"ATENCION: El producto '{producto.nombre}' no tiene existencia."
-                    else:
-                        mensaje = f"ALERTA: El producto '{producto.nombre}' tiene stock bajo. Quedan {stock_actual} unidades (Mínimo: {producto.stock_minimo})"
-
-                    # Generamos la alerta.
-                    self.alerta_controller.generar_alerta(id_producto, mensaje)
-
-            return True, f"Venta registrada correctamente. Total: ${total_venta:.2f}", id_venta
-
-        except Exception as e:
-            return False, f"Error al procesar la venta: {e}", None
-
-    # ==============================
-    # CALCULAR TOTAL DEL CARRITO
-    # ==============================
-
-    def calcular_total_carrito(self, carrito):
-        """
-        Este método calcula el total de un carrito de compras.
+        Obtiene el precio de un producto desde la base de datos.
 
         Parámetro:
-        carrito: Lista de diccionarios con productos del carrito.
+        id_producto: ID del producto.
 
         Retorna:
-        Total del carrito como float.
+        Precio del producto si existe.
+        None si no se encuentra.
         """
 
-        total = 0.0
+        try:
+            conexion = conectar_bd()
+            cursor = conexion.cursor()
 
-        for item in carrito:
-            cantidad = item.get("cantidad", 0)
-            precio = item.get("precio", 0)
+            cursor.execute("""
+                SELECT precio
+                FROM producto
+                WHERE id_producto = ?
+            """, (id_producto,))
+
+            resultado = cursor.fetchone()
+            conexion.close()
+
+            if resultado:
+                return resultado[0]
+
+            return None
+
+        except sqlite3.Error as error:
+            print(f"Error al obtener precio del producto: {error}")
+            return None
+
+    # ==============================
+    # NORMALIZAR PRODUCTOS
+    # ==============================
+
+    def normalizar_productos(self, productos):
+        """
+        Convierte la lista de productos a un formato estándar.
+
+        Formato esperado por el sistema:
+
+        {
+            "id_producto": 1,
+            "cantidad": 2,
+            "precio": 45.50
+        }
+
+        También acepta "precio_unitario" por si otro archivo lo usa.
+        """
+
+        productos_normalizados = []
+
+        for producto in productos:
+            id_producto = producto.get("id_producto")
+            cantidad = producto.get("cantidad")
+
+            # Puede venir como precio o como precio_unitario.
+            precio = producto.get("precio")
+
+            if precio is None:
+                precio = producto.get("precio_unitario")
+
+            # Si no se recibió precio, lo buscamos en la base de datos.
+            if precio is None and id_producto is not None:
+                precio = self.obtener_precio_producto(id_producto)
+
+            productos_normalizados.append({
+                "id_producto": id_producto,
+                "cantidad": cantidad,
+                "precio": precio
+            })
+
+        return productos_normalizados
+
+    # ==============================
+    # VALIDAR PRODUCTOS DE LA VENTA
+    # ==============================
+
+    def validar_productos(self, productos):
+        """
+        Valida que la venta tenga productos correctos.
+
+        Revisa:
+        - Que exista al menos un producto.
+        - Que cada producto tenga ID.
+        - Que la cantidad sea entera y mayor que cero.
+        - Que el precio sea numérico y mayor que cero.
+        - Que haya stock suficiente.
+        """
+
+        if not productos:
+            return False, "La venta debe tener al menos un producto."
+
+        for producto in productos:
+            id_producto = producto.get("id_producto")
+            cantidad = producto.get("cantidad")
+            precio = producto.get("precio")
+
+            if id_producto is None:
+                return False, "Todos los productos deben tener un ID."
+
+            if not es_entero(cantidad):
+                return False, "La cantidad debe ser un número entero."
+
+            cantidad = int(cantidad)
+
+            if cantidad <= 0:
+                return False, "La cantidad debe ser mayor que cero."
+
+            if not es_numero(precio):
+                return False, "El precio debe ser numérico."
+
+            precio = float(precio)
+
+            if precio <= 0:
+                return False, "El precio debe ser mayor que cero."
+
+            # Verificamos stock actual.
+            stock_actual = self.inventario_controller.obtener_stock(id_producto)
+
+            if cantidad > stock_actual:
+                return False, f"No hay suficiente existencia para el producto con ID {id_producto}."
+
+        return True, "Productos válidos."
+
+    # ==============================
+    # CALCULAR TOTAL
+    # ==============================
+
+    def calcular_total(self, productos):
+        """
+        Calcula el total de la venta.
+
+        Multiplica cantidad por precio de cada producto
+        y suma todos los subtotales.
+        """
+
+        total = 0
+
+        for producto in productos:
+            cantidad = int(producto.get("cantidad"))
+            precio = float(producto.get("precio"))
+
             subtotal = cantidad * precio
             total += subtotal
 
         return total
 
     # ==============================
-    # OBTENER VENTAS POR USUARIO
+    # PROCESAR VENTA
     # ==============================
 
-    def obtener_ventas_por_usuario(self, id_usuario):
+    def procesar_venta(self, productos, id_usuario=1):
         """
-        Este método obtiene todas las ventas realizadas por un usuario.
+        Procesa una venta completa.
 
-        Parámetro:
-        id_usuario: Identificador del usuario.
+        Parámetros:
+        productos: lista de productos vendidos.
+        id_usuario: usuario que realiza la venta.
+                    Por defecto se usa 1, que corresponde al admin de prueba.
 
-        Retorna:
-        Lista de ventas del usuario.
+        Flujo:
+        1. Normaliza productos.
+        2. Valida productos.
+        3. Calcula total.
+        4. Registra la venta con VentaController.
         """
 
-        try:
-            todas_ventas = self.venta_controller.obtener_ventas()
-            ventas_usuario = []
+        if id_usuario is None:
+            return False, "Debe existir un usuario para registrar la venta."
 
-            for venta in todas_ventas:
-                # Verificamos si la venta pertenece al usuario.
-                if len(venta) > 3 and venta[3] == id_usuario:
-                    ventas_usuario.append(venta)
+        productos = self.normalizar_productos(productos)
 
-            return ventas_usuario
+        resultado, mensaje = self.validar_productos(productos)
 
-        except Exception as e:
-            print(f"Error al obtener ventas por usuario: {e}")
-            return []
+        if not resultado:
+            return False, mensaje
+
+        total = self.calcular_total(productos)
+
+        resultado_venta = self.venta_controller.registrar_venta(
+            productos=productos,
+            total=total,
+            id_usuario=id_usuario
+        )
+
+        if resultado_venta:
+            return True, f"Venta registrada correctamente. Total: ${total:.2f}"
+
+        return False, "No se pudo registrar la venta."
+
+    # ==============================
+    # REGISTRAR VENTA
+    # ==============================
+
+    def registrar_venta(self, productos, id_usuario=1):
+        """
+        Método alternativo para registrar venta.
+
+        Se deja para que otros archivos puedan llamar registrar_venta()
+        en lugar de procesar_venta().
+        """
+
+        return self.procesar_venta(productos, id_usuario)
+
+    # ==============================
+    # OBTENER VENTAS
+    # ==============================
+
+    def obtener_ventas(self):
+        """
+        Obtiene todas las ventas registradas.
+        """
+
+        return self.venta_controller.obtener_ventas()
+
+    # ==============================
+    # LISTAR VENTAS
+    # ==============================
+
+    def listar_ventas(self):
+        """
+        Método alternativo para listar ventas.
+        """
+
+        return self.obtener_ventas()
 
     # ==============================
     # OBTENER DETALLE DE VENTA
     # ==============================
 
-    def obtener_detalle_venta(self, id_venta):
+    def obtener_detalle_venta(self, venta_id):
         """
-        Este método obtiene el detalle de una venta específica.
-
-        Parámetro:
-        id_venta: Identificador de la venta.
-
-        Retorna:
-        Lista de detalles de la venta.
+        Obtiene los productos incluidos en una venta.
         """
 
-        try:
-            return self.venta_controller.obtener_detalle_venta(id_venta)
-
-        except Exception as e:
-            print(f"Error al obtener detalle de venta: {e}")
+        if venta_id is None:
             return []
 
+        return self.venta_controller.obtener_detalle_venta(venta_id)
+
     # ==============================
-    # OBTENER RESUMEN DE VENTAS DEL DÍA
+    # ELIMINAR VENTA
     # ==============================
 
-    def obtener_resumen_ventas_dia(self):
+    def eliminar_venta(self, venta_id):
         """
-        Este método obtiene un resumen de las ventas del día actual.
+        Elimina una venta.
 
-        Retorna:
-        Diccionario con total de ventas, cantidad de ventas y total de productos vendidos.
+        Nota:
+        En esta versión escolar, eliminar una venta no devuelve stock.
         """
 
-        try:
-            todas_ventas = self.venta_controller.obtener_ventas()
-            fecha_hoy = datetime.now().strftime("%Y-%m-%d")
+        if venta_id is None:
+            return False, "Debe seleccionar una venta."
 
-            total_ventas = 0.0
-            cantidad_ventas = 0
-            total_productos = 0
+        resultado = self.venta_controller.eliminar_venta(venta_id)
 
-            for venta in todas_ventas:
-                # Verificamos si la venta es de hoy.
-                if len(venta) > 1 and venta[1].startswith(fecha_hoy):
-                    total_ventas += venta[2]
-                    cantidad_ventas += 1
+        if resultado:
+            return True, "Venta eliminada correctamente."
 
-                    # Obtenemos los detalles para contar productos.
-                    detalles = self.venta_controller.obtener_detalle_venta(venta[0])
-                    for detalle in detalles:
-                        total_productos += detalle[2] if len(detalle) > 2 else 0
+        return False, "No se pudo eliminar la venta."
 
-            return {
-                "total_ventas": total_ventas,
-                "cantidad_ventas": cantidad_ventas,
-                "total_productos": total_productos
-            }
 
-        except Exception as e:
-            print(f"Error al obtener resumen de ventas del día: {e}")
-            return {
-                "total_ventas": 0.0,
-                "cantidad_ventas": 0,
-                "total_productos": 0
-            }
+# ==============================
+# PRUEBA DEL SERVICIO
+# ==============================
+
+if __name__ == "__main__":
+    """
+    Esta prueba permite verificar que el archivo no marque errores.
+
+    No registra una venta automáticamente para evitar modificar datos
+    sin intención.
+    """
+
+    servicio = VentaService()
+
+    print("Ventas registradas:")
+    ventas = servicio.obtener_ventas()
+
+    for venta in ventas:
+        print(venta)
