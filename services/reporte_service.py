@@ -1,310 +1,554 @@
 # ==============================
-# SERVICIO DE REPORTES
+# CONTROLADOR DE PRODUCTOS
 # ==============================
 
-from controllers.reporte_controller import ReporteController
-from controllers.producto_controller import ProductoController
-from controllers.venta_controller import VentaController
-from datetime import datetime
-import os
+"""
+Este controlador maneja las operaciones relacionadas con productos.
+
+Permite:
+- Registrar productos.
+- Listar productos.
+- Buscar productos por código.
+- Buscar productos por ID.
+- Actualizar productos.
+- Eliminar productos.
+- Crear inventario inicial.
+- Actualizar inventario relacionado con el producto.
+"""
+
+import sqlite3
+from database.conexion import conectar_bd
 
 
-class ReporteService:
+class ProductoController:
     """
-    Servicio de reportes.
+    Controlador de productos.
 
-    Este servicio se encarga de la lógica de negocio relacionada
-    con la generación y exportación de reportes.
-
-    Se encarga de:
-    - Generar reportes de inventario actual
-    - Generar reportes de productos con stock bajo
-    - Generar reportes de ventas por período
-    - Generar reportes de productos más vendidos
-    - Exportar reportes a CSV y TXT
-    - Guardar reportes en archivos
-
-    Este servicio utiliza ReporteController, ProductoController y VentaController.
+    Este archivo funciona como puente entre la base de datos
+    y las futuras pantallas del sistema.
     """
 
-    def __init__(self):
-        """
-        Este método se ejecuta automáticamente cuando se crea un objeto ReporteService.
-
-        Crea las instancias de los controladores necesarios.
-        """
-
-        # Creamos las instancias de los controladores.
-        self.reporte_controller = ReporteController()
-        self.producto_controller = ProductoController()
-        self.venta_controller = VentaController()
-
     # ==============================
-    # GENERAR REPORTE DE INVENTARIO ACTUAL
+    # REGISTRAR PRODUCTO
     # ==============================
 
-    def generar_reporte_inventario(self):
+    def registrar_producto(
+        self,
+        nombre,
+        codigo,
+        precio,
+        stock_minimo,
+        id_categoria=None,
+        id_proveedor=None,
+        cantidad_inicial=0,
+        ubicacion=""
+    ):
         """
-        Este método genera un reporte del inventario actual.
+        Registra un nuevo producto en la base de datos.
 
-        Retorna:
-        Objeto Reporte con los datos del inventario.
-        None si hay error.
-        """
-
-        try:
-            # Usamos el controlador para generar el reporte.
-            reporte = self.reporte_controller.reporte_inventario_actual()
-
-            return reporte
-
-        except Exception as e:
-            print(f"Error al generar reporte de inventario: {e}")
-            return None
-
-    # ==============================
-    # GENERAR REPORTE DE STOCK BAJO
-    # ==============================
-
-    def generar_reporte_stock_bajo(self):
-        """
-        Este método genera un reporte de productos con stock bajo.
-
-        Retorna:
-        Objeto Reporte con los datos de productos con stock bajo.
-        None si hay error.
-        """
-
-        try:
-            # Usamos el controlador para generar el reporte.
-            reporte = self.reporte_controller.reporte_stock_bajo()
-
-            return reporte
-
-        except Exception as e:
-            print(f"Error al generar reporte de stock bajo: {e}")
-            return None
-
-    # ==============================
-    # GENERAR REPORTE DE VENTAS POR PERÍODO
-    # ==============================
-
-    def generar_reporte_ventas(self, fecha_inicio=None, fecha_fin=None):
-        """
-        Este método genera un reporte de ventas en un período.
+        También crea su inventario inicial.
 
         Parámetros:
-        fecha_inicio: Fecha de inicio (formato YYYY-MM-DD)
-        fecha_fin: Fecha de fin (formato YYYY-MM-DD)
+        nombre: Nombre del producto.
+        codigo: Código único del producto.
+        precio: Precio de venta.
+        stock_minimo: Cantidad mínima antes de alerta.
+        id_categoria: Categoría del producto.
+        id_proveedor: Proveedor del producto.
+        cantidad_inicial: Cantidad inicial en inventario.
+        ubicacion: Lugar físico donde se encuentra.
+        """
 
-        Retorna:
-        Objeto Reporte con los datos de ventas.
-        None si hay error.
+        if nombre == "" or codigo == "":
+            return False, "El nombre y el código son obligatorios."
+
+        try:
+            precio = float(precio)
+            stock_minimo = int(stock_minimo)
+            cantidad_inicial = int(cantidad_inicial)
+        except ValueError:
+            return False, "Precio, stock mínimo y cantidad inicial deben ser numéricos."
+
+        if precio <= 0:
+            return False, "El precio debe ser mayor que cero."
+
+        if stock_minimo < 0:
+            return False, "El stock mínimo no puede ser negativo."
+
+        if cantidad_inicial < 0:
+            return False, "La cantidad inicial no puede ser negativa."
+
+        try:
+            conexion = conectar_bd()
+            cursor = conexion.cursor()
+
+            cursor.execute("""
+                INSERT INTO producto (
+                    nombre,
+                    codigo,
+                    precio,
+                    stock_minimo,
+                    id_categoria,
+                    id_proveedor
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (
+                nombre,
+                codigo,
+                precio,
+                stock_minimo,
+                id_categoria,
+                id_proveedor
+            ))
+
+            id_producto = cursor.lastrowid
+
+            cursor.execute("""
+                INSERT INTO inventario (
+                    id_producto,
+                    cantidad_actual,
+                    ubicacion
+                )
+                VALUES (?, ?, ?)
+            """, (
+                id_producto,
+                cantidad_inicial,
+                ubicacion
+            ))
+
+            conexion.commit()
+            conexion.close()
+
+            return True, "Producto registrado correctamente."
+
+        except sqlite3.IntegrityError:
+            return False, "El código del producto ya existe."
+
+        except sqlite3.Error as error:
+            return False, f"Error al registrar producto: {error}"
+
+    # ==============================
+    # LISTAR PRODUCTOS
+    # ==============================
+
+    def listar_productos(self):
+        """
+        Lista todos los productos registrados.
+
+        Incluye información del inventario si existe.
         """
 
         try:
-            # Usamos el controlador para generar el reporte.
-            reporte = self.reporte_controller.reporte_ventas_por_periodo(fecha_inicio, fecha_fin)
+            conexion = conectar_bd()
+            cursor = conexion.cursor()
 
-            return reporte
+            cursor.execute("""
+                SELECT
+                    p.id_producto,
+                    p.nombre,
+                    p.codigo,
+                    p.precio,
+                    p.stock_minimo,
+                    p.id_categoria,
+                    p.id_proveedor,
+                    IFNULL(i.cantidad_actual, 0) AS cantidad_actual,
+                    IFNULL(i.ubicacion, '') AS ubicacion
+                FROM producto p
+                LEFT JOIN inventario i
+                ON p.id_producto = i.id_producto
+                ORDER BY p.nombre ASC
+            """)
 
-        except Exception as e:
-            print(f"Error al generar reporte de ventas: {e}")
-            return None
+            productos = cursor.fetchall()
+            conexion.close()
+
+            return productos
+
+        except sqlite3.Error as error:
+            print(f"Error al listar productos: {error}")
+            return []
 
     # ==============================
-    # GENERAR REPORTE DE PRODUCTOS MÁS VENDIDOS
+    # OBTENER PRODUCTOS
     # ==============================
 
-    def generar_reporte_mas_vendidos(self, limite=10):
+    def obtener_productos(self):
         """
-        Este método genera un reporte de los productos más vendidos.
+        Método alternativo para listar productos.
+
+        Se deja para compatibilidad con otros archivos del proyecto.
+        """
+
+        return self.listar_productos()
+
+    # ==============================
+    # BUSCAR POR CÓDIGO
+    # ==============================
+
+    def buscar_por_codigo(self, codigo):
+        """
+        Busca un producto por su código.
 
         Parámetro:
-        limite: Cantidad de productos a mostrar.
-
-        Retorna:
-        Objeto Reporte con los datos de productos más vendidos.
-        None si hay error.
+        codigo: Código único del producto.
         """
 
+        if codigo == "":
+            return None
+
         try:
-            # Usamos el controlador para generar el reporte.
-            reporte = self.reporte_controller.reporte_productos_mas_vendidos(limite)
+            conexion = conectar_bd()
+            cursor = conexion.cursor()
 
-            return reporte
+            cursor.execute("""
+                SELECT
+                    p.id_producto,
+                    p.nombre,
+                    p.codigo,
+                    p.precio,
+                    p.stock_minimo,
+                    p.id_categoria,
+                    p.id_proveedor,
+                    IFNULL(i.cantidad_actual, 0) AS cantidad_actual,
+                    IFNULL(i.ubicacion, '') AS ubicacion
+                FROM producto p
+                LEFT JOIN inventario i
+                ON p.id_producto = i.id_producto
+                WHERE p.codigo = ?
+            """, (codigo,))
 
-        except Exception as e:
-            print(f"Error al generar reporte de productos más vendidos: {e}")
+            producto = cursor.fetchone()
+            conexion.close()
+
+            return producto
+
+        except sqlite3.Error as error:
+            print(f"Error al buscar producto por código: {error}")
             return None
 
     # ==============================
-    # GENERAR REPORTE DE MOVIMIENTOS
+    # BUSCAR POR ID
     # ==============================
 
-    def generar_reporte_movimientos(self, fecha_inicio=None, fecha_fin=None):
+    def buscar_por_id(self, id_producto):
         """
-        Este método genera un reporte de movimientos (entradas y salidas).
+        Busca un producto por su ID.
 
-        Parámetros:
-        fecha_inicio: Fecha de inicio (formato YYYY-MM-DD)
-        fecha_fin: Fecha de fin (formato YYYY-MM-DD)
-
-        Retorna:
-        Objeto Reporte con los datos de movimientos.
-        None si hay error.
+        Este método es importante porque puede ser usado por ventas,
+        inventario, reportes o pantallas del sistema.
         """
+
+        if id_producto is None:
+            return None
 
         try:
-            # Usamos el controlador para generar el reporte.
-            reporte = self.reporte_controller.reporte_movimientos(fecha_inicio, fecha_fin)
+            conexion = conectar_bd()
+            cursor = conexion.cursor()
 
-            return reporte
+            cursor.execute("""
+                SELECT
+                    p.id_producto,
+                    p.nombre,
+                    p.codigo,
+                    p.precio,
+                    p.stock_minimo,
+                    p.id_categoria,
+                    p.id_proveedor,
+                    IFNULL(i.cantidad_actual, 0) AS cantidad_actual,
+                    IFNULL(i.ubicacion, '') AS ubicacion
+                FROM producto p
+                LEFT JOIN inventario i
+                ON p.id_producto = i.id_producto
+                WHERE p.id_producto = ?
+            """, (id_producto,))
 
-        except Exception as e:
-            print(f"Error al generar reporte de movimientos: {e}")
+            producto = cursor.fetchone()
+            conexion.close()
+
+            return producto
+
+        except sqlite3.Error as error:
+            print(f"Error al buscar producto por ID: {error}")
             return None
 
     # ==============================
-    # EXPORTAR REPORTE A CSV
+    # OBTENER PRODUCTO POR ID
     # ==============================
 
-    def exportar_reporte_csv(self, reporte, nombre_archivo=None):
+    def obtener_producto_por_id(self, id_producto):
         """
-        Este método exporta un reporte a un archivo CSV.
+        Método alternativo para buscar producto por ID.
 
-        Parámetros:
-        reporte: Objeto Reporte a exportar.
-        nombre_archivo: Nombre del archivo (opcional).
-
-        Retorna:
-        Tupla (éxito, ruta_del_archivo, mensaje)
+        Se deja para no romper archivos que usen este nombre.
         """
 
-        if not reporte:
-            return False, None, "No hay datos para exportar."
+        return self.buscar_por_id(id_producto)
+
+    # ==============================
+    # ACTUALIZAR PRODUCTO
+    # ==============================
+
+    def actualizar_producto(
+        self,
+        id_producto,
+        nombre,
+        codigo,
+        precio,
+        stock_minimo,
+        id_categoria=None,
+        id_proveedor=None
+    ):
+        """
+        Actualiza los datos principales de un producto.
+
+        No actualiza cantidad de inventario.
+        La cantidad se maneja desde inventario.
+        """
+
+        if id_producto is None:
+            return False, "Debe seleccionar un producto."
+
+        if nombre == "" or codigo == "":
+            return False, "El nombre y el código son obligatorios."
 
         try:
-            # Si no se proporciona nombre, generamos uno automático.
-            if not nombre_archivo:
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                nombre_archivo = f"reporte_{reporte.tipo}_{timestamp}.csv"
+            precio = float(precio)
+            stock_minimo = int(stock_minimo)
+        except ValueError:
+            return False, "Precio y stock mínimo deben ser numéricos."
 
-            # Aseguramos que tenga extensión .csv.
-            if not nombre_archivo.endswith('.csv'):
-                nombre_archivo += '.csv'
+        if precio <= 0:
+            return False, "El precio debe ser mayor que cero."
 
-            # Usamos el controlador para exportar.
-            self.reporte_controller.exportar_reporte_csv(reporte, nombre_archivo)
-
-            return True, nombre_archivo, f"Reporte exportado a {nombre_archivo}"
-
-        except Exception as e:
-            return False, None, f"Error al exportar reporte: {e}"
-
-    # ==============================
-    # EXPORTAR REPORTE A TEXTO
-    # ==============================
-
-    def exportar_reporte_texto(self, reporte, nombre_archivo=None):
-        """
-        Este método exporta un reporte a un archivo de texto.
-
-        Parámetros:
-        reporte: Objeto Reporte a exportar.
-        nombre_archivo: Nombre del archivo (opcional).
-
-        Retorna:
-        Tupla (éxito, ruta_del_archivo, mensaje, contenido_texto)
-        """
-
-        if not reporte:
-            return False, None, "No hay datos para exportar.", ""
+        if stock_minimo < 0:
+            return False, "El stock mínimo no puede ser negativo."
 
         try:
-            # Obtenemos el texto del reporte.
-            texto_reporte = reporte.exportar_texto()
+            conexion = conectar_bd()
+            cursor = conexion.cursor()
 
-            # Si no se proporciona nombre, generamos uno automático.
-            if not nombre_archivo:
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                nombre_archivo = f"reporte_{reporte.tipo}_{timestamp}.txt"
+            cursor.execute("""
+                UPDATE producto
+                SET
+                    nombre = ?,
+                    codigo = ?,
+                    precio = ?,
+                    stock_minimo = ?,
+                    id_categoria = ?,
+                    id_proveedor = ?
+                WHERE id_producto = ?
+            """, (
+                nombre,
+                codigo,
+                precio,
+                stock_minimo,
+                id_categoria,
+                id_proveedor,
+                id_producto
+            ))
 
-            # Aseguramos que tenga extensión .txt.
-            if not nombre_archivo.endswith('.txt'):
-                nombre_archivo += '.txt'
+            conexion.commit()
+            conexion.close()
 
-            # Guardamos el archivo.
-            with open(nombre_archivo, 'w', encoding='utf-8') as archivo:
-                archivo.write(texto_reporte)
+            return True, "Producto actualizado correctamente."
 
-            return True, nombre_archivo, f"Reporte exportado a {nombre_archivo}", texto_reporte
+        except sqlite3.IntegrityError:
+            return False, "El código del producto ya existe."
 
-        except Exception as e:
-            return False, None, f"Error al exportar reporte: {e}", ""
+        except sqlite3.Error as error:
+            return False, f"Error al actualizar producto: {error}"
 
     # ==============================
-    # OBTENER REPORTE COMO TEXTO
+    # ACTUALIZAR INVENTARIO
     # ==============================
 
-    def obtener_reporte_como_texto(self, reporte):
+    def actualizar_inventario(self, id_producto, nueva_cantidad, nueva_ubicacion=""):
         """
-        Este método convierte un reporte a texto sin guardarlo.
-
-        Parámetro:
-        reporte: Objeto Reporte a convertir.
-
-        Retorna:
-        String con el texto del reporte.
+        Actualiza la cantidad y ubicación del producto en inventario.
         """
 
-        if not reporte:
-            return "No hay datos para mostrar."
+        if id_producto is None:
+            return False, "Debe seleccionar un producto."
 
-        return reporte.exportar_texto()
+        try:
+            nueva_cantidad = int(nueva_cantidad)
+        except ValueError:
+            return False, "La cantidad debe ser un número entero."
+
+        if nueva_cantidad < 0:
+            return False, "La cantidad no puede ser negativa."
+
+        try:
+            conexion = conectar_bd()
+            cursor = conexion.cursor()
+
+            cursor.execute("""
+                SELECT id_inventario
+                FROM inventario
+                WHERE id_producto = ?
+            """, (id_producto,))
+
+            inventario = cursor.fetchone()
+
+            if inventario:
+                cursor.execute("""
+                    UPDATE inventario
+                    SET cantidad_actual = ?, ubicacion = ?
+                    WHERE id_producto = ?
+                """, (
+                    nueva_cantidad,
+                    nueva_ubicacion,
+                    id_producto
+                ))
+            else:
+                cursor.execute("""
+                    INSERT INTO inventario (
+                        id_producto,
+                        cantidad_actual,
+                        ubicacion
+                    )
+                    VALUES (?, ?, ?)
+                """, (
+                    id_producto,
+                    nueva_cantidad,
+                    nueva_ubicacion
+                ))
+
+            conexion.commit()
+            conexion.close()
+
+            return True, "Inventario actualizado correctamente."
+
+        except sqlite3.Error as error:
+            return False, f"Error al actualizar inventario: {error}"
 
     # ==============================
-    # GENERAR REPORTE COMPLETO DEL SISTEMA
+    # ELIMINAR PRODUCTO
     # ==============================
 
-    def generar_reporte_completo(self):
+    def eliminar_producto(self, id_producto):
         """
-        Este método genera un reporte completo del sistema.
+        Elimina un producto.
 
-        Combina inventario actual, stock bajo y resumen de ventas.
+        Primero elimina registros relacionados en alerta e inventario.
+        Después elimina el producto.
+        """
 
-        Retorna:
-        Diccionario con todos los reportes.
+        if id_producto is None:
+            return False, "Debe seleccionar un producto."
+
+        try:
+            conexion = conectar_bd()
+            cursor = conexion.cursor()
+
+            cursor.execute("""
+                DELETE FROM alerta
+                WHERE id_producto = ?
+            """, (id_producto,))
+
+            cursor.execute("""
+                DELETE FROM inventario
+                WHERE id_producto = ?
+            """, (id_producto,))
+
+            cursor.execute("""
+                DELETE FROM detalle_venta
+                WHERE id_producto = ?
+            """, (id_producto,))
+
+            cursor.execute("""
+                DELETE FROM producto
+                WHERE id_producto = ?
+            """, (id_producto,))
+
+            conexion.commit()
+            conexion.close()
+
+            return True, "Producto eliminado correctamente."
+
+        except sqlite3.Error as error:
+            return False, f"Error al eliminar producto: {error}"
+
+    # ==============================
+    # BUSCAR PRODUCTOS POR NOMBRE
+    # ==============================
+
+    def buscar_por_nombre(self, nombre):
+        """
+        Busca productos que coincidan parcialmente con el nombre.
         """
 
         try:
-            reporte_inventario = self.generar_reporte_inventario()
-            reporte_stock_bajo = self.generar_reporte_stock_bajo()
-            reporte_ventas = self.generar_reporte_ventas()
+            conexion = conectar_bd()
+            cursor = conexion.cursor()
 
-            # Calculamos estadísticas adicionales.
-            productos = self.producto_controller.listar_productos()
-            total_productos = len(productos)
+            cursor.execute("""
+                SELECT
+                    p.id_producto,
+                    p.nombre,
+                    p.codigo,
+                    p.precio,
+                    p.stock_minimo,
+                    IFNULL(i.cantidad_actual, 0) AS cantidad_actual,
+                    IFNULL(i.ubicacion, '') AS ubicacion
+                FROM producto p
+                LEFT JOIN inventario i
+                ON p.id_producto = i.id_producto
+                WHERE p.nombre LIKE ?
+                ORDER BY p.nombre ASC
+            """, (f"%{nombre}%",))
 
-            # Contamos productos con stock bajo.
-            productos_stock_bajo = 0
-            for producto in productos:
-                stock_actual = producto[5] if len(producto) > 5 else 0
-                stock_minimo = producto[4]
-                if stock_actual <= stock_minimo:
-                    productos_stock_bajo += 1
+            productos = cursor.fetchall()
+            conexion.close()
 
-            resultado = {
-                "fecha_generacion": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "total_productos": total_productos,
-                "productos_con_stock_bajo": productos_stock_bajo,
-                "reporte_inventario": reporte_inventario,
-                "reporte_stock_bajo": reporte_stock_bajo,
-                "reporte_ventas": reporte_ventas
-            }
+            return productos
 
-            return resultado
+        except sqlite3.Error as error:
+            print(f"Error al buscar productos por nombre: {error}")
+            return []
 
-        except Exception as e:
-            print(f"Error al generar reporte completo: {e}")
-            return None
+    # ==============================
+    # CONTAR PRODUCTOS
+    # ==============================
+
+    def contar_productos(self):
+        """
+        Cuenta cuántos productos hay registrados.
+        """
+
+        try:
+            conexion = conectar_bd()
+            cursor = conexion.cursor()
+
+            cursor.execute("""
+                SELECT COUNT(*)
+                FROM producto
+            """)
+
+            resultado = cursor.fetchone()
+            conexion.close()
+
+            if resultado:
+                return resultado[0]
+
+            return 0
+
+        except sqlite3.Error as error:
+            print(f"Error al contar productos: {error}")
+            return 0
+
+
+# ==============================
+# PRUEBA DEL CONTROLADOR
+# ==============================
+
+if __name__ == "__main__":
+    controlador = ProductoController()
+
+    print("Productos registrados:")
+    productos = controlador.listar_productos()
+
+    for producto in productos:
+        print(producto)
+
+    print("Total de productos:", controlador.contar_productos())

@@ -1,284 +1,272 @@
+# Importamos el controlador de inventario.
+# Este controlador se encarga de comunicarse con la base de datos.
+from controllers.inventario_controller import InventarioController
+
+# Importamos validaciones para revisar datos antes de enviarlos al controlador.
+from utils.validaciones import validar_cantidad, campo_vacio
+
+
 # ==============================
 # SERVICIO DE INVENTARIO
 # ==============================
 
-from controllers.inventario_controller import InventarioController
-from controllers.producto_controller import ProductoController
-from controllers.alerta_controller import AlertaController
-
-
 class InventarioService:
     """
-    Servicio de inventario.
+    Esta clase contiene la lógica principal del inventario.
 
-    Este servicio se encarga de la lógica de negocio relacionada
-    con el control de inventario.
+    Un service sirve para organizar reglas del sistema antes de llegar
+    directamente a la base de datos.
 
-    Se encarga de:
-    - Registrar entradas de productos (compras)
-    - Registrar salidas de productos (ventas)
-    - Verificar stock disponible
-    - Generar alertas automáticas cuando el stock es bajo
-    - Calcular estadísticas de inventario
-
-    Este servicio utiliza InventarioController, ProductoController y AlertaController.
+    Por ejemplo:
+    - Validar que la cantidad sea correcta.
+    - Revisar si existe stock suficiente.
+    - Registrar entradas.
+    - Registrar salidas.
+    - Verificar si un producto quedó en stock bajo.
     """
 
     def __init__(self):
         """
-        Este método se ejecuta automáticamente cuando se crea un objeto InventarioService.
-
-        Crea las instancias de los controladores necesarios.
+        Al crear el servicio, también creamos una instancia
+        del controlador de inventario.
         """
 
-        # Creamos las instancias de los controladores.
         self.inventario_controller = InventarioController()
-        self.producto_controller = ProductoController()
-        self.alerta_controller = AlertaController()
 
     # ==============================
-    # REGISTRAR ENTRADA DE PRODUCTO
+    # LISTAR INVENTARIO
     # ==============================
 
-    def registrar_entrada(self, id_producto, cantidad, ubicacion=""):
+    def listar_inventario(self):
         """
-        Este método registra una entrada de productos al inventario.
-
-        Se usa cuando se recibe una compra de productos.
-
-        Parámetros:
-        id_producto: Identificador del producto.
-        cantidad: Cantidad que ingresa al inventario (debe ser positiva).
-        ubicacion: Ubicación física del producto (opcional).
+        Obtiene todos los productos con su información de inventario.
 
         Retorna:
-        Tupla (éxito, mensaje)
+        Lista de productos con inventario.
         """
 
-        # Validamos que la cantidad sea positiva.
-        if cantidad <= 0:
-            return False, "La cantidad debe ser mayor a cero."
-
-        try:
-            # Obtenemos el producto para verificar que existe.
-            producto = self.producto_controller.buscar_por_id(id_producto)
-
-            if not producto:
-                return False, "El producto no existe."
-
-            # Obtenemos el stock actual.
-            stock_actual = self.inventario_controller.obtener_stock(id_producto)
-
-            # Calculamos el nuevo stock.
-            nuevo_stock = stock_actual + cantidad
-
-            # Actualizamos el inventario.
-            self.inventario_controller.actualizar_stock(id_producto, nuevo_stock)
-
-            # Si se proporcionó ubicación, la actualizamos.
-            if ubicacion:
-                self.inventario_controller.actualizar_ubicacion(id_producto, ubicacion)
-
-            # Verificamos si después de la entrada hay que generar alertas.
-            self._verificar_y_generar_alerta(id_producto, nuevo_stock, producto.stock_minimo)
-
-            return True, f"Entrada registrada correctamente. Nuevo stock: {nuevo_stock}"
-
-        except Exception as e:
-            return False, f"Error al registrar entrada: {e}"
+        return self.inventario_controller.listar_inventario()
 
     # ==============================
-    # REGISTRAR SALIDA DE PRODUCTO
+    # OBTENER PRODUCTOS
+    # ==============================
+
+    def obtener_productos(self):
+        """
+        Obtiene los productos disponibles junto con su inventario.
+
+        Este método puede ser utilizado por las pantallas para llenar
+        tablas o listas desplegables.
+        """
+
+        return self.inventario_controller.obtener_productos()
+
+    # ==============================
+    # CONSULTAR STOCK
+    # ==============================
+
+    def consultar_stock(self, id_producto):
+        """
+        Consulta la cantidad actual de un producto.
+
+        Parámetro:
+        id_producto: identificador del producto.
+
+        Retorna:
+        Cantidad actual disponible.
+        """
+
+        if id_producto is None:
+            return 0
+
+        return self.inventario_controller.obtener_stock(id_producto)
+
+    # ==============================
+    # REGISTRAR ENTRADA
+    # ==============================
+
+    def registrar_entrada(self, id_producto, cantidad, ubicacion=None):
+        """
+        Registra una entrada de productos al inventario.
+
+        Una entrada significa que llegaron productos nuevos
+        y se suman a la existencia actual.
+
+        Parámetros:
+        id_producto: producto seleccionado.
+        cantidad: cantidad que llegó.
+        ubicacion: ubicación física del producto.
+        """
+
+        # Validamos que se haya seleccionado un producto.
+        if id_producto is None:
+            return False, "Debe seleccionar un producto."
+
+        # Validamos que la cantidad sea correcta.
+        resultado, mensaje = validar_cantidad(cantidad)
+
+        if not resultado:
+            return False, mensaje
+
+        # Convertimos la cantidad a entero.
+        cantidad = int(cantidad)
+
+        # En una entrada, la cantidad debe ser mayor que cero.
+        if cantidad <= 0:
+            return False, "La cantidad de entrada debe ser mayor que cero."
+
+        # Si la ubicación viene vacía, se manda como cadena vacía.
+        if ubicacion is None:
+            ubicacion = ""
+
+        # Registramos la entrada usando el controlador.
+        return self.inventario_controller.registrar_entrada(
+            id_producto,
+            cantidad,
+            ubicacion
+        )
+
+    # ==============================
+    # REGISTRAR SALIDA
     # ==============================
 
     def registrar_salida(self, id_producto, cantidad):
         """
-        Este método registra una salida de productos del inventario.
+        Registra una salida de productos del inventario.
 
-        Se usa cuando se realiza una venta.
+        Una salida significa que se descuentan productos,
+        por ejemplo por venta o ajuste de inventario.
 
         Parámetros:
-        id_producto: Identificador del producto.
-        cantidad: Cantidad que sale del inventario (debe ser positiva).
-
-        Retorna:
-        Tupla (éxito, mensaje)
+        id_producto: producto seleccionado.
+        cantidad: cantidad que saldrá.
         """
 
-        # Validamos que la cantidad sea positiva.
+        # Validamos que se haya seleccionado un producto.
+        if id_producto is None:
+            return False, "Debe seleccionar un producto."
+
+        # Validamos que la cantidad sea correcta.
+        resultado, mensaje = validar_cantidad(cantidad)
+
+        if not resultado:
+            return False, mensaje
+
+        # Convertimos a entero.
+        cantidad = int(cantidad)
+
+        # En una salida, la cantidad debe ser mayor que cero.
         if cantidad <= 0:
-            return False, "La cantidad debe ser mayor a cero."
+            return False, "La cantidad de salida debe ser mayor que cero."
 
-        try:
-            # Obtenemos el producto para verificar que existe.
-            producto = self.producto_controller.buscar_por_id(id_producto)
+        # Consultamos stock actual.
+        stock_actual = self.inventario_controller.obtener_stock(id_producto)
 
-            if not producto:
-                return False, "El producto no existe."
+        # Verificamos que haya suficiente existencia.
+        if cantidad > stock_actual:
+            return False, "No hay suficiente existencia disponible."
 
-            # Obtenemos el stock actual.
-            stock_actual = self.inventario_controller.obtener_stock(id_producto)
+        # Registramos la salida.
+        resultado, mensaje = self.inventario_controller.registrar_salida(
+            id_producto,
+            cantidad
+        )
 
-            # Verificamos que haya suficiente stock.
-            if stock_actual < cantidad:
-                return False, f"Stock insuficiente. Solo hay {stock_actual} unidades."
+        # Si la salida fue correcta, revisamos si quedó en stock bajo.
+        if resultado:
+            stock_bajo = self.inventario_controller.verificar_stock_bajo(id_producto)
 
-            # Calculamos el nuevo stock.
-            nuevo_stock = stock_actual - cantidad
+            if stock_bajo:
+                return True, "Salida registrada correctamente. El producto quedó en stock bajo."
 
-            # Actualizamos el inventario.
-            self.inventario_controller.actualizar_stock(id_producto, nuevo_stock)
-
-            # Verificamos si después de la salida hay que generar alertas.
-            self._verificar_y_generar_alerta(id_producto, nuevo_stock, producto.stock_minimo)
-
-            return True, f"Salida registrada correctamente. Nuevo stock: {nuevo_stock}"
-
-        except Exception as e:
-            return False, f"Error al registrar salida: {e}"
+        return resultado, mensaje
 
     # ==============================
-    # VERIFICAR STOCK DISPONIBLE
+    # ACTUALIZAR STOCK DIRECTO
     # ==============================
 
-    def verificar_stock(self, id_producto, cantidad_solicitada):
+    def actualizar_stock(self, id_producto, nueva_cantidad):
         """
-        Este método verifica si hay suficiente stock disponible.
+        Actualiza directamente la cantidad actual del producto.
+
+        Este método sirve para ajustes manuales de inventario.
 
         Parámetros:
-        id_producto: Identificador del producto.
-        cantidad_solicitada: Cantidad que se quiere vender o retirar.
-
-        Retorna:
-        True si hay suficiente stock.
-        False si no hay suficiente stock o el producto no existe.
+        id_producto: producto seleccionado.
+        nueva_cantidad: nueva cantidad que tendrá el producto.
         """
 
-        try:
-            stock_actual = self.inventario_controller.obtener_stock(id_producto)
-            return stock_actual >= cantidad_solicitada
+        if id_producto is None:
+            return False, "Debe seleccionar un producto."
 
-        except Exception:
+        resultado, mensaje = validar_cantidad(nueva_cantidad)
+
+        if not resultado:
+            return False, mensaje
+
+        nueva_cantidad = int(nueva_cantidad)
+
+        return self.inventario_controller.actualizar_stock(
+            id_producto,
+            nueva_cantidad
+        )
+
+    # ==============================
+    # ACTUALIZAR UBICACIÓN
+    # ==============================
+
+    def actualizar_ubicacion(self, id_producto, nueva_ubicacion):
+        """
+        Actualiza la ubicación física de un producto.
+
+        Parámetros:
+        id_producto: producto seleccionado.
+        nueva_ubicacion: nueva ubicación del producto.
+        """
+
+        if id_producto is None:
+            return False, "Debe seleccionar un producto."
+
+        if campo_vacio(nueva_ubicacion):
+            return False, "La ubicación no puede estar vacía."
+
+        return self.inventario_controller.actualizar_ubicacion(
+            id_producto,
+            nueva_ubicacion
+        )
+
+    # ==============================
+    # VERIFICAR STOCK BAJO
+    # ==============================
+
+    def verificar_stock_bajo(self, id_producto):
+        """
+        Verifica si un producto tiene stock bajo.
+
+        Retorna:
+        True si está bajo.
+        False si no está bajo.
+        """
+
+        if id_producto is None:
             return False
 
-    # ==============================
-    # OBTENER STOCK ACTUAL
-    # ==============================
+        return self.inventario_controller.verificar_stock_bajo(id_producto)
 
-    def obtener_stock_actual(self, id_producto):
-        """
-        Este método obtiene la cantidad actual de un producto.
 
-        Parámetro:
-        id_producto: Identificador del producto.
+# ==============================
+# PRUEBA DEL SERVICIO
+# ==============================
 
-        Retorna:
-        Cantidad actual del producto.
-        0 si el producto no existe o hay error.
-        """
+if __name__ == "__main__":
+    """
+    Esta prueba sirve para revisar que el servicio no marque errores.
+    """
 
-        try:
-            return self.inventario_controller.obtener_stock(id_producto)
+    servicio = InventarioService()
 
-        except Exception:
-            return 0
+    print("Inventario actual:")
+    inventario = servicio.listar_inventario()
 
-    # ==============================
-    # VERIFICAR Y GENERAR ALERTA (PRIVADO)
-    # ==============================
-
-    def _verificar_y_generar_alerta(self, id_producto, stock_actual, stock_minimo):
-        """
-        Este método privado verifica si el stock está bajo y genera una alerta.
-
-        Parámetros:
-        id_producto: Identificador del producto.
-        stock_actual: Cantidad actual disponible.
-        stock_minimo: Cantidad mínima permitida.
-        """
-
-        # Si el stock actual es menor o igual al mínimo, generamos alerta.
-        if stock_actual <= stock_minimo:
-            # Obtenemos el nombre del producto.
-            producto = self.producto_controller.buscar_por_id(id_producto)
-
-            if producto:
-                # Construimos el mensaje de alerta.
-                if stock_actual <= 0:
-                    mensaje = f"ATENCION: El producto '{producto.nombre}' no tiene existencia."
-                else:
-                    mensaje = f"ALERTA: El producto '{producto.nombre}' tiene stock bajo. Quedan {stock_actual} unidades (Minimo: {stock_minimo})"
-
-                # Generamos la alerta.
-                self.alerta_controller.generar_alerta(id_producto, mensaje)
-
-    # ==============================
-    # OBTENER PRODUCTOS CON STOCK BAJO
-    # ==============================
-
-    def obtener_productos_con_stock_bajo(self):
-        """
-        Este método obtiene todos los productos que tienen stock bajo.
-
-        Retorna:
-        Lista de productos con stock actual menor o igual al stock mínimo.
-        """
-
-        try:
-            # Obtenemos todos los productos.
-            productos = self.producto_controller.listar_productos()
-
-            productos_stock_bajo = []
-
-            for producto in productos:
-                # Extraemos los datos de la tupla.
-                id_producto = producto[0]
-                nombre = producto[1]
-                stock_minimo = producto[4]
-                stock_actual = producto[5] if len(producto) > 5 else 0
-
-                if stock_actual <= stock_minimo:
-                    productos_stock_bajo.append({
-                        "id_producto": id_producto,
-                        "nombre": nombre,
-                        "stock_actual": stock_actual,
-                        "stock_minimo": stock_minimo,
-                        "faltante": stock_minimo - stock_actual if stock_actual < stock_minimo else 0
-                    })
-
-            return productos_stock_bajo
-
-        except Exception as e:
-            print(f"Error al obtener productos con stock bajo: {e}")
-            return []
-
-    # ==============================
-    # OBTENER VALOR TOTAL DEL INVENTARIO
-    # ==============================
-
-    def obtener_valor_total_inventario(self):
-        """
-        Este método calcula el valor total del inventario.
-
-        Suma (precio * stock_actual) de todos los productos.
-
-        Retorna:
-        Valor total del inventario como float.
-        """
-
-        try:
-            productos = self.producto_controller.listar_productos()
-            valor_total = 0.0
-
-            for producto in productos:
-                # Extraemos los datos de la tupla.
-                precio = producto[3]
-                stock_actual = producto[5] if len(producto) > 5 else 0
-
-                valor_total += precio * stock_actual
-
-            return valor_total
-
-        except Exception as e:
-            print(f"Error al calcular valor total del inventario: {e}")
-            return 0.0
+    for item in inventario:
+        print(item)

@@ -1,0 +1,2 @@
+# Este archivo permite que Python reconozca esta carpeta como un paquete.
+# Puede permanecer vacío.
