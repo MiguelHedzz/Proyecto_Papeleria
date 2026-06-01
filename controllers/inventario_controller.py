@@ -1,586 +1,287 @@
-# Importamos sqlite3 para manejar posibles errores de base de datos.
+
 import sqlite3
-
-# Importamos la conexión a la base de datos.
 from database.conexion import conectar_bd
+from models.inventario import Inventario
 
 
-# ==============================
-# CONTROLADOR DE INVENTARIO
-# ==============================
-
-class InventarioController:
+def crear_inventario(inventario):
     """
-    Esta clase se encarga de manejar las operaciones relacionadas
-    con el inventario de productos.
+    Crea un nuevo registro de inventario para un producto.
 
-    Aquí se controlan:
-    - Entradas de artículos.
-    - Salidas de artículos.
-    - Consulta de existencias.
-    - Actualización de ubicación.
-    - Listado general del inventario.
+    Args:
+        inventario (Inventario): Objeto Inventario a registrar.
+
+    Returns:
+        int: ID del inventario creado.
     """
+    conexion = conectar_bd()
+    cursor = conexion.cursor()
 
-    # ==============================
-    # LISTAR INVENTARIO
-    # ==============================
+    cursor.execute("""
+        INSERT INTO inventario (id_producto, cantidad_actual, ubicacion)
+        VALUES (?, ?, ?)
+    """, (inventario.id_producto, inventario.cantidad_actual, inventario.ubicacion))
 
-    def listar_inventario(self):
-        """
-        Consulta todos los productos junto con su información de inventario.
+    id_inventario = cursor.lastrowid
+    conexion.commit()
+    conexion.close()
 
-        Retorna una lista con:
-        id_producto, nombre, código, precio, stock mínimo,
-        cantidad actual y ubicación.
-        """
+    return id_inventario
 
-        try:
-            conexion = conectar_bd()
-            cursor = conexion.cursor()
 
-            cursor.execute("""
-                SELECT
-                    p.id_producto,
-                    p.nombre,
-                    p.codigo,
-                    p.precio,
-                    p.stock_minimo,
-                    IFNULL(i.cantidad_actual, 0) AS cantidad_actual,
-                    IFNULL(i.ubicacion, '') AS ubicacion
-                FROM producto p
-                LEFT JOIN inventario i
-                ON p.id_producto = i.id_producto
-                ORDER BY p.nombre ASC
-            """)
-
-            inventario = cursor.fetchall()
-            conexion.close()
-
-            return inventario
-
-        except sqlite3.Error as error:
-            print("Error al listar inventario:", error)
-            return []
-
-    # ==============================
-    # OBTENER PRODUCTOS
-    # ==============================
-
-    def obtener_productos(self):
-        """
-        Método auxiliar para obtener productos con inventario.
-
-        Se deja este nombre porque puede ser usado por otras partes
-        del sistema o por las vistas.
-        """
-
-        return self.listar_inventario()
-
-    # ==============================
-    # OBTENER STOCK DE UN PRODUCTO
-    # ==============================
-
-    def obtener_stock(self, id_producto):
-        """
-        Consulta la cantidad actual de un producto.
-
-        Parámetro:
-        id_producto: identificador del producto.
-
-        Retorna:
-        cantidad actual si existe.
-        0 si no tiene inventario registrado.
-        """
-
-        try:
-            conexion = conectar_bd()
-            cursor = conexion.cursor()
-
-            cursor.execute("""
-                SELECT cantidad_actual
-                FROM inventario
-                WHERE id_producto = ?
-            """, (id_producto,))
-
-            resultado = cursor.fetchone()
-            conexion.close()
-
-            if resultado:
-                return resultado[0]
-
-            return 0
-
-        except sqlite3.Error as error:
-            print("Error al obtener stock:", error)
-            return 0
-
-    # ==============================
-    # REGISTRAR ENTRADA
-    # ==============================
-
-    def registrar_entrada(self, id_producto, cantidad, ubicacion=None):
-        """
-        Registra una entrada de artículos al inventario.
-
-        Esto significa que llegaron productos nuevos
-        y se deben sumar a la existencia actual.
-
-        Parámetros:
-        id_producto: producto al que se le sumará inventario.
-        cantidad: cantidad recibida.
-        ubicacion: ubicación física del producto, opcional.
-
-        Retorna:
-        True y mensaje si se registró correctamente.
-        False y mensaje si hubo error.
-        """
-
-        if id_producto is None:
-            return False, "Debe seleccionar un producto."
-
-        if cantidad <= 0:
-            return False, "La cantidad de entrada debe ser mayor que cero."
-
-        try:
-            conexion = conectar_bd()
-            cursor = conexion.cursor()
-
-            # Primero revisamos si el producto ya tiene registro de inventario.
-            cursor.execute("""
-                SELECT id_inventario, cantidad_actual, ubicacion
-                FROM inventario
-                WHERE id_producto = ?
-            """, (id_producto,))
-
-            inventario = cursor.fetchone()
-
-            if inventario:
-                # Si ya existe, sumamos la cantidad nueva.
-                id_inventario = inventario[0]
-                cantidad_actual = inventario[1]
-                ubicacion_actual = inventario[2]
-
-                nueva_cantidad = cantidad_actual + cantidad
-
-                # Si no se manda una nueva ubicación, mantenemos la anterior.
-                if ubicacion is None or ubicacion == "":
-                    ubicacion = ubicacion_actual
-
-                cursor.execute("""
-                    UPDATE inventario
-                    SET cantidad_actual = ?, ubicacion = ?
-                    WHERE id_inventario = ?
-                """, (
-                    nueva_cantidad,
-                    ubicacion,
-                    id_inventario
-                ))
-
-            else:
-                # Si no existe inventario para ese producto, lo creamos.
-                if ubicacion is None:
-                    ubicacion = ""
-
-                cursor.execute("""
-                    INSERT INTO inventario (
-                        id_producto,
-                        cantidad_actual,
-                        ubicacion
-                    )
-                    VALUES (?, ?, ?)
-                """, (
-                    id_producto,
-                    cantidad,
-                    ubicacion
-                ))
-
-            conexion.commit()
-            conexion.close()
-
-            return True, "Entrada registrada correctamente."
-
-        except sqlite3.Error as error:
-            return False, f"Error al registrar entrada: {error}"
-
-    # ==============================
-    # REGISTRAR SALIDA
-    # ==============================
-
-    def registrar_salida(self, id_producto, cantidad):
-        """
-        Registra una salida de artículos del inventario.
-
-        Esto se utiliza cuando se vende un producto o se retira
-        del inventario.
-
-        Parámetros:
-        id_producto: producto al que se le descontará inventario.
-        cantidad: cantidad que se descontará.
-
-        Retorna:
-        True y mensaje si se descontó correctamente.
-        False y mensaje si hubo error.
-        """
-
-        if id_producto is None:
-            return False, "Debe seleccionar un producto."
-
-        if cantidad <= 0:
-            return False, "La cantidad de salida debe ser mayor que cero."
-
-        try:
-            conexion = conectar_bd()
-            cursor = conexion.cursor()
-
-            # Consultamos la existencia actual.
-            cursor.execute("""
-                SELECT id_inventario, cantidad_actual
-                FROM inventario
-                WHERE id_producto = ?
-            """, (id_producto,))
-
-            inventario = cursor.fetchone()
-
-            if not inventario:
-                conexion.close()
-                return False, "El producto no tiene inventario registrado."
-
-            id_inventario = inventario[0]
-            cantidad_actual = inventario[1]
-
-            # Validamos que haya suficiente existencia.
-            if cantidad > cantidad_actual:
-                conexion.close()
-                return False, "No hay suficiente existencia disponible."
-
-            nueva_cantidad = cantidad_actual - cantidad
-
-            cursor.execute("""
-                UPDATE inventario
-                SET cantidad_actual = ?
-                WHERE id_inventario = ?
-            """, (
-                nueva_cantidad,
-                id_inventario
-            ))
-
-            conexion.commit()
-            conexion.close()
-
-            return True, "Salida registrada correctamente."
-
-        except sqlite3.Error as error:
-            return False, f"Error al registrar salida: {error}"
-
-    # ==============================
-    # ACTUALIZAR STOCK
-    # ==============================
-
-    def actualizar_stock(self, id_producto, nueva_cantidad):
-        """
-        Actualiza directamente la cantidad actual de un producto.
-
-        Este método no suma ni resta, solamente reemplaza
-        la cantidad actual por la nueva cantidad.
-
-        Parámetros:
-        id_producto: producto a modificar.
-        nueva_cantidad: nueva existencia del producto.
-        """
-
-        if id_producto is None:
-            return False, "Debe seleccionar un producto."
-
-        if nueva_cantidad < 0:
-            return False, "La cantidad no puede ser negativa."
-
-        try:
-            conexion = conectar_bd()
-            cursor = conexion.cursor()
-
-            # Verificamos si ya existe registro de inventario.
-            cursor.execute("""
-                SELECT id_inventario
-                FROM inventario
-                WHERE id_producto = ?
-            """, (id_producto,))
-
-            inventario = cursor.fetchone()
-
-            if inventario:
-                cursor.execute("""
-                    UPDATE inventario
-                    SET cantidad_actual = ?
-                    WHERE id_producto = ?
-                """, (
-                    nueva_cantidad,
-                    id_producto
-                ))
-            else:
-                cursor.execute("""
-                    INSERT INTO inventario (
-                        id_producto,
-                        cantidad_actual,
-                        ubicacion
-                    )
-                    VALUES (?, ?, ?)
-                """, (
-                    id_producto,
-                    nueva_cantidad,
-                    ""
-                ))
-
-            conexion.commit()
-            conexion.close()
-
-            return True, "Stock actualizado correctamente."
-
-        except sqlite3.Error as error:
-            return False, f"Error al actualizar stock: {error}"
-
-    # ==============================
-    # ACTUALIZAR UBICACIÓN
-    # ==============================
-
-    def actualizar_ubicacion(self, id_producto, nueva_ubicacion):
-        """
-        Actualiza la ubicación física de un producto dentro del inventario.
-
-        Parámetros:
-        id_producto: producto a modificar.
-        nueva_ubicacion: nueva ubicación del producto.
-        """
-
-        if id_producto is None:
-            return False, "Debe seleccionar un producto."
-
-        try:
-            conexion = conectar_bd()
-            cursor = conexion.cursor()
-
-            # Revisamos si existe inventario para el producto.
-            cursor.execute("""
-                SELECT id_inventario
-                FROM inventario
-                WHERE id_producto = ?
-            """, (id_producto,))
-
-            inventario = cursor.fetchone()
-
-            if inventario:
-                cursor.execute("""
-                    UPDATE inventario
-                    SET ubicacion = ?
-                    WHERE id_producto = ?
-                """, (
-                    nueva_ubicacion,
-                    id_producto
-                ))
-            else:
-                # Si no existe inventario, se crea con cantidad 0.
-                cursor.execute("""
-                    INSERT INTO inventario (
-                        id_producto,
-                        cantidad_actual,
-                        ubicacion
-                    )
-                    VALUES (?, ?, ?)
-                """, (
-                    id_producto,
-                    0,
-                    nueva_ubicacion
-                ))
-
-            conexion.commit()
-            conexion.close()
-
-            return True, "Ubicación actualizada correctamente."
-
-        except sqlite3.Error as error:
-            return False, f"Error al actualizar ubicación: {error}"
-
-    # ==============================
-    # AGREGAR PRODUCTO DESDE INVENTARIO
-    # ==============================
-
-    def agregar_producto(
-        self,
-        nombre,
-        codigo,
-        precio,
-        stock_minimo,
-        cantidad_actual=0,
-        ubicacion="",
-        id_categoria=None,
-        id_proveedor=None
-    ):
-        """
-        Permite agregar un producto desde el módulo de inventario.
-
-        Este método crea primero el producto en la tabla producto
-        y después crea su inventario inicial.
-
-        Nota:
-        Este método puede servir para una pantalla sencilla de inventario.
-        """
-
-        if nombre == "" or codigo == "":
-            return False, "El nombre y el código son obligatorios."
-
-        if precio <= 0:
-            return False, "El precio debe ser mayor que cero."
-
-        if stock_minimo < 0:
-            return False, "El stock mínimo no puede ser negativo."
-
-        if cantidad_actual < 0:
-            return False, "La cantidad actual no puede ser negativa."
-
-        try:
-            conexion = conectar_bd()
-            cursor = conexion.cursor()
-
-            cursor.execute("""
-                INSERT INTO producto (
-                    nombre,
-                    codigo,
-                    precio,
-                    stock_minimo,
-                    id_categoria,
-                    id_proveedor
-                )
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (
-                nombre,
-                codigo,
-                precio,
-                stock_minimo,
-                id_categoria,
-                id_proveedor
-            ))
-
-            id_producto = cursor.lastrowid
-
-            cursor.execute("""
-                INSERT INTO inventario (
-                    id_producto,
-                    cantidad_actual,
-                    ubicacion
-                )
-                VALUES (?, ?, ?)
-            """, (
-                id_producto,
-                cantidad_actual,
-                ubicacion
-            ))
-
-            conexion.commit()
-            conexion.close()
-
-            return True, "Producto agregado al inventario correctamente."
-
-        except sqlite3.IntegrityError:
-            return False, "El código del producto ya existe."
-
-        except sqlite3.Error as error:
-            return False, f"Error al agregar producto al inventario: {error}"
-
-    # ==============================
-    # ELIMINAR INVENTARIO DE PRODUCTO
-    # ==============================
-
-    def eliminar_producto(self, id_producto):
-        """
-        Elimina el registro de inventario de un producto.
-
-        Importante:
-        Este método NO elimina el producto del catálogo,
-        solamente elimina su inventario.
-
-        Para eliminar el producto completo se debe usar ProductoController.
-        """
-
-        if id_producto is None:
-            return False, "Debe seleccionar un producto."
-
-        try:
-            conexion = conectar_bd()
-            cursor = conexion.cursor()
-
-            cursor.execute("""
-                DELETE FROM inventario
-                WHERE id_producto = ?
-            """, (id_producto,))
-
-            conexion.commit()
-            conexion.close()
-
-            return True, "Inventario eliminado correctamente."
-
-        except sqlite3.Error as error:
-            return False, f"Error al eliminar inventario: {error}"
-
-    # ==============================
-    # VERIFICAR STOCK BAJO
-    # ==============================
-
-    def verificar_stock_bajo(self, id_producto):
-        """
-        Verifica si un producto llegó a su stock mínimo.
-
-        Retorna:
-        True si el stock actual es menor o igual al stock mínimo.
-        False si todavía tiene suficiente existencia.
-        """
-
-        try:
-            conexion = conectar_bd()
-            cursor = conexion.cursor()
-
-            cursor.execute("""
-                SELECT
-                    p.stock_minimo,
-                    IFNULL(i.cantidad_actual, 0)
-                FROM producto p
-                LEFT JOIN inventario i
-                ON p.id_producto = i.id_producto
-                WHERE p.id_producto = ?
-            """, (id_producto,))
-
-            resultado = cursor.fetchone()
-            conexion.close()
-
-            if not resultado:
-                return False
-
-            stock_minimo = resultado[0]
-            cantidad_actual = resultado[1]
-
-            if cantidad_actual <= stock_minimo:
-                return True
-
-            return False
-
-        except sqlite3.Error as error:
-            print("Error al verificar stock bajo:", error)
-            return False
-
-
-# ==============================
-# PRUEBA DEL CONTROLADOR
-# ==============================
-
-if __name__ == "__main__":
+def listar_inventario():
     """
-    Esta prueba solo se ejecuta si abrimos este archivo directamente.
-    Sirve para revisar que el controlador no tenga errores básicos.
+    Obtiene todo el inventario con información del producto.
+
+    Returns:
+        list: Lista de diccionarios con datos de inventario y producto.
     """
+    conexion = conectar_bd()
+    cursor = conexion.cursor()
 
-    controlador = InventarioController()
+    cursor.execute("""
+        SELECT 
+            i.id_inventario,
+            i.id_producto,
+            p.nombre AS producto,
+            p.codigo,
+            i.cantidad_actual,
+            p.stock_minimo,
+            i.ubicacion,
+            CASE 
+                WHEN i.cantidad_actual <= p.stock_minimo THEN 'Bajo'
+                ELSE 'Normal'
+            END AS estado_stock
+        FROM inventario i
+        JOIN producto p ON i.id_producto = p.id_producto
+        ORDER BY p.nombre
+    """)
 
-    inventario = controlador.listar_inventario()
+    inventario = [dict(row) for row in cursor.fetchall()]
+    conexion.close()
+    return inventario
 
-    print("Inventario actual:")
-    for item in inventario:
-        print(item)
+
+def buscar_inventario_por_producto(id_producto):
+    """
+    Busca el registro de inventario de un producto específico.
+
+    Args:
+        id_producto (int): ID del producto a buscar.
+
+    Returns:
+        dict: Datos del inventario, o None si no existe.
+    """
+    conexion = conectar_bd()
+    cursor = conexion.cursor()
+
+    cursor.execute("""
+        SELECT 
+            i.id_inventario,
+            i.id_producto,
+            p.nombre AS producto,
+            p.codigo,
+            i.cantidad_actual,
+            p.stock_minimo,
+            i.ubicacion
+        FROM inventario i
+        JOIN producto p ON i.id_producto = p.id_producto
+        WHERE i.id_producto = ?
+    """, (id_producto,))
+
+    row = cursor.fetchone()
+    conexion.close()
+
+    return dict(row) if row else None
+
+
+def actualizar_stock(id_producto, nueva_cantidad):
+    """
+    Actualiza la cantidad actual en inventario de un producto.
+
+    Args:
+        id_producto (int): ID del producto.
+        nueva_cantidad (int): Nueva cantidad en stock.
+
+    Returns:
+        bool: True si se actualizó correctamente.
+    """
+    conexion = conectar_bd()
+    cursor = conexion.cursor()
+
+    cursor.execute("""
+        UPDATE inventario
+        SET cantidad_actual = ?
+        WHERE id_producto = ?
+    """, (nueva_cantidad, id_producto))
+
+    filas_afectadas = cursor.rowcount
+    conexion.commit()
+    conexion.close()
+
+    return filas_afectadas > 0
+
+
+def actualizar_ubicacion(id_producto, nueva_ubicacion):
+    """
+    Actualiza la ubicación física de un producto.
+
+    Args:
+        id_producto (int): ID del producto.
+        nueva_ubicacion (str): Nueva ubicación.
+
+    Returns:
+        bool: True si se actualizó correctamente.
+    """
+    conexion = conectar_bd()
+    cursor = conexion.cursor()
+
+    cursor.execute("""
+        UPDATE inventario
+        SET ubicacion = ?
+        WHERE id_producto = ?
+    """, (nueva_ubicacion, id_producto))
+
+    filas_afectadas = cursor.rowcount
+    conexion.commit()
+    conexion.close()
+
+    return filas_afectadas > 0
+
+
+def registrar_entrada(id_producto, cantidad, ubicacion=None):
+    """
+    Registra una entrada de productos al inventario (suma stock).
+
+    Args:
+        id_producto (int): ID del producto.
+        cantidad (int): Cantidad a agregar.
+        ubicacion (str): Nueva ubicación opcional.
+
+    Returns:
+        bool: True si se registró correctamente.
+    """
+    conexion = conectar_bd()
+    cursor = conexion.cursor()
+
+    cursor.execute("""
+        SELECT id_inventario, cantidad_actual, ubicacion
+        FROM inventario
+        WHERE id_producto = ?
+    """, (id_producto,))
+
+    row = cursor.fetchone()
+
+    if row:
+        nueva_cantidad = row["cantidad_actual"] + cantidad
+        ubicacion_final = ubicacion if ubicacion else row["ubicacion"]
+
+        cursor.execute("""
+            UPDATE inventario
+            SET cantidad_actual = ?, ubicacion = ?
+            WHERE id_inventario = ?
+        """, (nueva_cantidad, ubicacion_final, row["id_inventario"]))
+    else:
+        ubicacion_final = ubicacion if ubicacion else "Almacén"
+        cursor.execute("""
+            INSERT INTO inventario (id_producto, cantidad_actual, ubicacion)
+            VALUES (?, ?, ?)
+        """, (id_producto, cantidad, ubicacion_final))
+
+    conexion.commit()
+    conexion.close()
+    return True
+
+
+def registrar_salida(id_producto, cantidad):
+    """
+    Registra una salida de productos del inventario (resta stock).
+
+    Args:
+        id_producto (int): ID del producto.
+        cantidad (int): Cantidad a restar.
+
+    Returns:
+        bool: True si se registró correctamente, False si no hay suficiente stock.
+    """
+    conexion = conectar_bd()
+    cursor = conexion.cursor()
+
+    cursor.execute("""
+        SELECT id_inventario, cantidad_actual
+        FROM inventario
+        WHERE id_producto = ?
+    """, (id_producto,))
+
+    row = cursor.fetchone()
+
+    if not row:
+        conexion.close()
+        return False
+
+    stock_actual = row["cantidad_actual"]
+
+    if cantidad > stock_actual:
+        conexion.close()
+        return False
+
+    nueva_cantidad = stock_actual - cantidad
+
+    cursor.execute("""
+        UPDATE inventario
+        SET cantidad_actual = ?
+        WHERE id_inventario = ?
+    """, (nueva_cantidad, row["id_inventario"]))
+
+    conexion.commit()
+    conexion.close()
+    return True
+
+
+def eliminar_inventario(id_inventario):
+    """
+    Elimina un registro de inventario.
+
+    Args:
+        id_inventario (int): ID del inventario a eliminar.
+
+    Returns:
+        bool: True si se eliminó correctamente.
+    """
+    conexion = conectar_bd()
+    cursor = conexion.cursor()
+
+    cursor.execute("DELETE FROM inventario WHERE id_inventario = ?", (id_inventario,))
+
+    conexion.commit()
+    conexion.close()
+    return True
+
+
+def verificar_stock_bajo():
+    """
+    Verifica qué productos tienen stock igual o menor al mínimo.
+
+    Returns:
+        list: Lista de productos con stock bajo.
+    """
+    conexion = conectar_bd()
+    cursor = conexion.cursor()
+
+    cursor.execute("""
+        SELECT 
+            p.id_producto,
+            p.nombre,
+            p.codigo,
+            p.stock_minimo,
+            i.cantidad_actual,
+            i.ubicacion
+        FROM producto p
+        JOIN inventario i ON p.id_producto = i.id_producto
+        WHERE i.cantidad_actual <= p.stock_minimo
+        ORDER BY i.cantidad_actual ASC
+    """)
+
+    productos = [dict(row) for row in cursor.fetchall()]
+    conexion.close()
+    return productos
