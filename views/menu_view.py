@@ -148,51 +148,75 @@ class MenuView(tk.Toplevel):
 
     def _abrir_productos(self):
         """Abre la ventana de administración de productos."""
-        from views.ventana_productos import VentanaProductos
-        ventana = VentanaProductos(self)
-        ventana.focus_set()
+        try:
+            from views.productos_view import ProductosView
+            ventana = ProductosView(self, self.usuario)
+            ventana.focus_set()
+        except ImportError:
+            messagebox.showinfo("En desarrollo", "Módulo de productos en construcción")
 
     def _abrir_categorias(self):
         """Abre la ventana de gestión de categorías."""
-        from views.ventana_categorias import VentanaCategorias
-        ventana = VentanaCategorias(self)
-        ventana.focus_set()
+        try:
+            from views.categorias_view import CategoriasView
+            ventana = CategoriasView(self, self.usuario)
+            ventana.focus_set()
+        except ImportError:
+            messagebox.showinfo("En desarrollo", "Módulo de categorías en construcción")
 
     def _abrir_proveedores(self):
         """Abre la ventana de gestión de proveedores."""
-        from views.ventana_proveedores import VentanaProveedores
-        ventana = VentanaProveedores(self)
-        ventana.focus_set()
+        try:
+            from views.proveedores_view import ProveedoresView
+            ventana = ProveedoresView(self, self.usuario)
+            ventana.focus_set()
+        except ImportError:
+            messagebox.showinfo("En desarrollo", "Módulo de proveedores en construcción")
 
     def _abrir_inventario(self):
         """Abre la ventana de control de inventario."""
-        from views.ventana_inventario import VentanaInventario
-        ventana = VentanaInventario(self)
-        ventana.focus_set()
+        try:
+            from views.inventario_view import InventarioView
+            ventana = InventarioView(self, self.usuario)
+            ventana.focus_set()
+        except ImportError:
+            messagebox.showinfo("En desarrollo", "Módulo de inventario en construcción")
 
     def _abrir_ventas(self):
         """Abre la ventana de registro de ventas."""
-        from views.ventana_ventas import VentanaVentas
-        ventana = VentanaVentas(self, self.usuario)
-        ventana.focus_set()
+        try:
+            from views.ventas_view import VentasView
+            ventana = VentasView(self, self.usuario)
+            ventana.focus_set()
+        except ImportError:
+            messagebox.showinfo("En desarrollo", "Módulo de ventas en construcción")
 
     def _abrir_alertas(self):
         """Abre la ventana de alertas de stock bajo."""
-        from views.ventana_alertas import VentanaAlertas
-        ventana = VentanaAlertas(self)
-        ventana.focus_set()
+        try:
+            from views.alertas_view import AlertasView
+            ventana = AlertasView(self, self.usuario)
+            ventana.focus_set()
+        except ImportError:
+            messagebox.showinfo("En desarrollo", "Módulo de alertas en construcción")
 
     def _abrir_reportes(self):
         """Abre la ventana de reportes."""
-        from views.ventana_reportes import VentanaReportes
-        ventana = VentanaReportes(self)
-        ventana.focus_set()
+        try:
+            from views.reportes_view import ReportesView
+            ventana = ReportesView(self, self.usuario)
+            ventana.focus_set()
+        except ImportError:
+            messagebox.showinfo("En desarrollo", "Módulo de reportes en construcción")
 
     def _abrir_usuarios(self):
         """Abre la ventana de administración de usuarios."""
-        from views.ventana_usuarios import VentanaUsuarios
-        ventana = VentanaUsuarios(self)
-        ventana.focus_set()
+        try:
+            from views.usuarios_view import UsuariosView
+            ventana = UsuariosView(self, self.usuario)
+            ventana.focus_set()
+        except ImportError:
+            messagebox.showinfo("En desarrollo", "Módulo de usuarios en construcción")
 
     def _cerrar_sesion(self):
         """Cierra la sesión y vuelve a la pantalla de login."""
