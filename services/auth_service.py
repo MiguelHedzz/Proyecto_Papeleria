@@ -1,179 +1,133 @@
-# ==============================
-#  SERVICIO DE AUTENTICACION
-# ==============================
+"""
+Servicio de Autenticación.
+Maneja la lógica de inicio de sesión, registro y validación de usuarios.
+"""
 
-from controllers.usuario_controller import UsuarioController
+from database.conexion import conectar_bd
+from models.usuario import Usuario
 
 
-class AuthService:
+def validar_login(usuario, password):
     """
-    Servicio de autenticación.
+    Valida las credenciales de un usuario.
 
-    Este servicio se encarga de la lógica de negocio relacionada
-    con la autenticación de usuarios.
+    Args:
+        usuario (str): Nombre de usuario.
+        password (str): Contraseña del usuario.
 
-    Se encarga de:
-    - Validar credenciales de inicio de sesión
-    - Verificar roles de usuario
-    - Manejar la sesión actual
-
-    Este servicio utiliza UsuarioController para acceder a los datos.
+    Returns:
+        dict: Datos del usuario si las credenciales son válidas, None si no.
     """
+    conexion = conectar_bd()
+    cursor = conexion.cursor()
 
-    def __init__(self):
-        """
-        Este método se ejecuta automáticamente cuando se crea un objeto AuthService.
+    cursor.execute("""
+        SELECT id_usuario, nombre, usuario, rol
+        FROM usuario
+        WHERE usuario = ? AND password = ?
+    """, (usuario, password))
 
-        Crea una instancia del controlador de usuarios para acceder a la base de datos.
-        """
+    row = cursor.fetchone()
+    conexion.close()
 
-        # Creamos una instancia del controlador de usuarios.
-        self.usuario_controller = UsuarioController()
+    return dict(row) if row else None
 
-        # Variable para almacenar el usuario actual (sesión).
-        self.usuario_actual = None
 
-    # ==============================
-    # AUTENTICAR USUARIO
-    # ==============================
+def registrar_usuario(usuario_obj):
+    """
+    Registra un nuevo usuario en el sistema.
 
-    def autenticar(self, nombre_usuario, password):
-        """
-        Este método valida las credenciales de un usuario.
+    Args:
+        usuario_obj (Usuario): Objeto Usuario con los datos a registrar.
 
-        Parámetros:
-        nombre_usuario: Nombre de usuario ingresado en el login.
-        password: Contraseña ingresada en el login.
+    Returns:
+        int: ID del usuario registrado, o None si el usuario ya existe.
+    """
+    conexion = conectar_bd()
+    cursor = conexion.cursor()
 
-        Retorna:
-        Un objeto Usuario si las credenciales son correctas.
-        None si son incorrectas o si los campos están vacíos.
-        """
+    try:
+        cursor.execute("""
+            INSERT INTO usuario (nombre, usuario, password, rol)
+            VALUES (?, ?, ?, ?)
+        """, (usuario_obj.nombre, usuario_obj.usuario,
+              usuario_obj.password, usuario_obj.rol))
 
-        # Validamos que los campos no estén vacíos.
-        if not nombre_usuario or not password:
-            return None
+        id_usuario = cursor.lastrowid
+        conexion.commit()
+        return id_usuario
 
-        # Llamamos al controlador para validar las credenciales.
-        usuario = self.usuario_controller.validar_login(nombre_usuario, password)
+    except Exception:
+        conexion.rollback()
+        return None
 
-        # Si la autenticación fue exitosa, guardamos el usuario en la sesión.
-        if usuario:
-            self.usuario_actual = usuario
+    finally:
+        conexion.close()
 
-        return usuario
 
-    # ==============================
-    # CERRAR SESIÓN
-    # ==============================
+def listar_usuarios():
+    """
+    Obtiene todos los usuarios registrados.
 
-    def cerrar_sesion(self):
-        """
-        Este método cierra la sesión actual del usuario.
+    Returns:
+        list: Lista de diccionarios con los datos de cada usuario.
+    """
+    conexion = conectar_bd()
+    cursor = conexion.cursor()
 
-        Elimina el usuario actual de la variable de sesión.
-        """
+    cursor.execute("""
+        SELECT id_usuario, nombre, usuario, rol
+        FROM usuario
+        ORDER BY nombre
+    """)
 
-        self.usuario_actual = None
+    usuarios = [dict(row) for row in cursor.fetchall()]
+    conexion.close()
+    return usuarios
 
-    # ==============================
-    # VERIFICAR SI ESTÁ AUTENTICADO
-    # ==============================
 
-    def esta_autenticado(self):
-        """
-        Este método verifica si hay un usuario con sesión activa.
+def actualizar_usuario(usuario_obj):
+    """
+    Actualiza los datos de un usuario existente.
 
-        Retorna:
-        True si hay un usuario autenticado.
-        False si no hay sesión activa.
-        """
+    Args:
+        usuario_obj (Usuario): Objeto Usuario con datos actualizados.
 
-        return self.usuario_actual is not None
+    Returns:
+        bool: True si se actualizó correctamente.
+    """
+    conexion = conectar_bd()
+    cursor = conexion.cursor()
 
-    # ==============================
-    # VERIFICAR ROL ADMINISTRADOR
-    # ==============================
+    cursor.execute("""
+        UPDATE usuario
+        SET nombre = ?, usuario = ?, password = ?, rol = ?
+        WHERE id_usuario = ?
+    """, (usuario_obj.nombre, usuario_obj.usuario,
+          usuario_obj.password, usuario_obj.rol,
+          usuario_obj.id_usuario))
 
-    def es_administrador(self):
-        """
-        Este método verifica si el usuario actual tiene rol de administrador.
+    filas_afectadas = cursor.rowcount
+    conexion.commit()
+    conexion.close()
 
-        Retorna:
-        True si el usuario actual es administrador.
-        False si no es administrador o no hay sesión activa.
-        """
+    return filas_afectadas > 0
 
-        if self.usuario_actual and self.usuario_actual.rol == "Administrador":
-            return True
 
-        return False
+def eliminar_usuario(id_usuario):
+    """
+    Elimina un usuario del sistema.
 
-    # ==============================
-    # VERIFICAR ROL VENDEDOR
-    # ==============================
+    Args:
+        id_usuario (int): ID del usuario a eliminar.
 
-    def es_vendedor(self):
-        """
-        Este método verifica si el usuario actual tiene rol de vendedor.
+    Returns:
+        bool: True si se eliminó correctamente.
+    """
+    conexion = conectar_bd()
+    cursor = conexion.cursor()
 
-        Retorna:
-        True si el usuario actual es vendedor.
-        False si no es vendedor o no hay sesión activa.
-        """
-
-        if self.usuario_actual and self.usuario_actual.rol == "Vendedor":
-            return True
-
-        return False
-
-    # ==============================
-    # OBTENER USUARIO ACTUAL
-    # ==============================
-
-    def obtener_usuario_actual(self):
-        """
-        Este método retorna el usuario actualmente autenticado.
-
-        Retorna:
-        Objeto Usuario si hay sesión activa.
-        None si no hay sesión activa.
-        """
-
-        return self.usuario_actual
-
-    # ==============================
-    # OBTENER NOMBRE DEL USUARIO ACTUAL
-    # ==============================
-
-    def obtener_nombre_usuario_actual(self):
-        """
-        Este método retorna el nombre del usuario actual.
-
-        Retorna:
-        String con el nombre del usuario.
-        "Invitado" si no hay sesión activa.
-        """
-
-        if self.usuario_actual:
-            return self.usuario_actual.nombre
-
-        return "Invitado"
-
-    # ==============================
-    # OBTENER ROL DEL USUARIO ACTUAL
-    # ==============================
-
-    def obtener_rol_actual(self):
-        """
-        Este método retorna el rol del usuario actual.
-
-        Retorna:
-        String con el rol del usuario.
-        "Sin rol" si no hay sesión activa.
-        """
-
-        if self.usuario_actual:
-            return self.usuario_actual.rol
-
-        return "Sin rol"
+    cursor.execute("DELETE FROM usuario WHERE id_usuario = ?", (id_usuario,))
+    conexion.commit()
+    conexion.close()
+    return True
