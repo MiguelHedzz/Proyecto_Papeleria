@@ -1,19 +1,6 @@
 # ==============================
-# VISTA DE PRUEBA DE INVENTARIO
+# VISTA DE INVENTARIO
 # ==============================
-
-"""
-Esta vista sirve para probar entradas y salidas de inventario.
-
-Permite:
-- Ver productos con cantidades.
-- Registrar entradas.
-- Registrar salidas.
-- Actualizar la tabla para confirmar cambios.
-
-Se puede ejecutar con:
-python -m views.inventario_view
-"""
 
 import os
 import sys
@@ -28,37 +15,34 @@ from controllers.producto_controller import ProductoController
 from controllers.inventario_controller import InventarioController
 
 
-class VentanaInventario(tk.Toplevel):
+class InventarioView(tk.Toplevel):
     """
-    Ventana para probar entradas y salidas de inventario.
+    Ventana para gestionar el inventario.
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, usuario=None):
         super().__init__(parent)
 
-        self.title("Prueba Inventario - Entradas y Salidas")
+        self.title("Inventario")
         self.geometry("1000x620")
         self.minsize(900, 560)
         self.configure(bg="#ecf0f1")
 
         self.producto_controller = ProductoController()
         self.inventario_controller = InventarioController()
+        self.usuario = usuario
         self.productos = []
 
         self.crear_interfaz()
         self.cargar_productos()
 
     def crear_interfaz(self):
-        """
-        Crea la interfaz visual.
-        """
-
         contenedor = tk.Frame(self, bg="#ecf0f1")
         contenedor.pack(fill="both", expand=True, padx=25, pady=25)
 
         titulo = tk.Label(
             contenedor,
-            text="Prueba de Inventario",
+            text="Inventario",
             bg="#ecf0f1",
             fg="#2c3e50",
             font=("Segoe UI", 24, "bold")
@@ -168,20 +152,11 @@ class VentanaInventario(tk.Toplevel):
 
         self.tabla_inventario.pack(side="left", fill="both", expand=True)
 
-        scrollbar = ttk.Scrollbar(
-            frame_tabla,
-            orient="vertical",
-            command=self.tabla_inventario.yview
-        )
+        scrollbar = ttk.Scrollbar(frame_tabla, orient="vertical", command=self.tabla_inventario.yview)
         scrollbar.pack(side="right", fill="y")
-
         self.tabla_inventario.configure(yscrollcommand=scrollbar.set)
 
     def crear_boton(self, parent, texto, color, comando):
-        """
-        Crea botón estándar.
-        """
-
         return tk.Button(
             parent,
             text=texto,
@@ -196,10 +171,6 @@ class VentanaInventario(tk.Toplevel):
         )
 
     def cargar_productos(self):
-        """
-        Carga productos en combo y tabla.
-        """
-
         self.productos = self.producto_controller.listar_productos()
 
         valores_combo = []
@@ -233,82 +204,58 @@ class VentanaInventario(tk.Toplevel):
             )
 
     def obtener_id_producto_seleccionado(self):
-        """
-        Obtiene el ID del producto seleccionado en el combo.
-        """
-
         seleccionado = self.combo_productos.get()
-
-        if seleccionado == "":
+        if not seleccionado:
             return None
-
         try:
             return int(seleccionado.split(" - ")[0])
         except ValueError:
             return None
 
     def obtener_cantidad(self):
-        """
-        Obtiene la cantidad escrita.
-        """
-
-        cantidad_texto = self.entry_cantidad.get().strip()
-
         try:
-            cantidad = int(cantidad_texto)
+            return int(self.entry_cantidad.get().strip())
         except ValueError:
             return None
 
-        return cantidad
-
     def registrar_entrada(self):
-        """
-        Registra entrada al inventario.
-        """
-
         id_producto = self.obtener_id_producto_seleccionado()
         cantidad = self.obtener_cantidad()
         ubicacion = self.entry_ubicacion.get().strip()
 
-        if id_producto is None:
+        if not id_producto:
             messagebox.showwarning("Aviso", "Selecciona un producto.")
             return
 
-        if cantidad is None or cantidad <= 0:
+        if not cantidad or cantidad <= 0:
             messagebox.showwarning("Aviso", "La cantidad debe ser mayor que cero.")
             return
 
         resultado, mensaje = self.inventario_controller.registrar_entrada(
-            id_producto,
-            cantidad,
-            ubicacion
+            id_producto, cantidad, ubicacion
         )
 
         if resultado:
             messagebox.showinfo("Éxito", mensaje)
             self.cargar_productos()
+            self.entry_ubicacion.delete(0, tk.END)
         else:
             messagebox.showerror("Error", mensaje)
 
     def registrar_salida(self):
-        """
-        Registra salida del inventario.
-        """
-
         id_producto = self.obtener_id_producto_seleccionado()
         cantidad = self.obtener_cantidad()
 
-        if id_producto is None:
+        if not id_producto:
             messagebox.showwarning("Aviso", "Selecciona un producto.")
             return
 
-        if cantidad is None or cantidad <= 0:
+        if not cantidad or cantidad <= 0:
             messagebox.showwarning("Aviso", "La cantidad debe ser mayor que cero.")
             return
 
         resultado, mensaje = self.inventario_controller.registrar_salida(
-            id_producto,
-            cantidad
+            id_producto, cantidad
         )
 
         if resultado:
@@ -318,19 +265,7 @@ class VentanaInventario(tk.Toplevel):
             messagebox.showerror("Error", mensaje)
 
 
-def abrir_inventario(parent=None):
-    """
-    Abre la ventana de inventario.
-    """
-
-    ventana = VentanaInventario(parent)
+def abrir_inventario(parent=None, usuario=None):
+    ventana = InventarioView(parent, usuario)
     ventana.grab_set()
     return ventana
-
-
-if __name__ == "__main__":
-    root = tk.Tk()
-    root.withdraw()
-
-    VentanaInventario(root)
-    root.mainloop()

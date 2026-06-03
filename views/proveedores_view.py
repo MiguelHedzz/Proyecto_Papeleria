@@ -3,7 +3,7 @@
 # ==============================
 
 """
-Vista para probar el CRUD de proveedores.
+Vista para la gestión completa de proveedores.
 
 Permite:
 - Crear proveedor.
@@ -12,9 +12,6 @@ Permite:
 - Seleccionar proveedor.
 - Actualizar proveedor.
 - Eliminar proveedor.
-
-Ejecutar:
-python -m views.proveedores_view
 """
 
 import os
@@ -29,21 +26,22 @@ if RUTA_PROYECTO not in sys.path:
 from controllers.proveedor_controller import ProveedorController
 
 
-class VentanaProveedores(tk.Toplevel):
+class ProveedoresView(tk.Toplevel):
     """
     Ventana de administración de proveedores.
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, usuario=None):
         super().__init__(parent)
 
-        self.title("CRUD Proveedores")
+        self.title("Proveedores")
         self.geometry("900x560")
         self.minsize(820, 520)
         self.configure(bg="#ecf0f1")
 
         self.proveedor_controller = ProveedorController()
         self.id_proveedor_seleccionado = None
+        self.usuario = usuario
 
         self.crear_interfaz()
         self.cargar_proveedores()
@@ -54,7 +52,7 @@ class VentanaProveedores(tk.Toplevel):
 
         tk.Label(
             contenedor,
-            text="Administrar Proveedores",
+            text="Proveedores",
             bg="#ecf0f1",
             fg="#2c3e50",
             font=("Segoe UI", 24, "bold")
@@ -170,10 +168,12 @@ class VentanaProveedores(tk.Toplevel):
         telefono = self.entry_telefono.get().strip()
         correo = self.entry_correo.get().strip()
 
+        if nombre == "":
+            messagebox.showwarning("Aviso", "El nombre del proveedor es obligatorio.")
+            return
+
         resultado, mensaje = self.proveedor_controller.registrar_proveedor(
-            nombre,
-            telefono,
-            correo
+            nombre, telefono, correo
         )
 
         if resultado:
@@ -209,11 +209,12 @@ class VentanaProveedores(tk.Toplevel):
         telefono = self.entry_telefono.get().strip()
         correo = self.entry_correo.get().strip()
 
+        if nombre == "":
+            messagebox.showwarning("Aviso", "El nombre del proveedor es obligatorio.")
+            return
+
         resultado, mensaje = self.proveedor_controller.actualizar_proveedor(
-            self.id_proveedor_seleccionado,
-            nombre,
-            telefono,
-            correo
+            self.id_proveedor_seleccionado, nombre, telefono, correo
         )
 
         if resultado:
@@ -274,8 +275,8 @@ class VentanaProveedores(tk.Toplevel):
             self.tabla.selection_remove(seleccion)
 
 
-def abrir_proveedores(parent=None):
-    ventana = VentanaProveedores(parent)
+def abrir_proveedores(parent=None, usuario=None):
+    ventana = ProveedoresView(parent, usuario)
     ventana.grab_set()
     return ventana
 
@@ -283,5 +284,5 @@ def abrir_proveedores(parent=None):
 if __name__ == "__main__":
     root = tk.Tk()
     root.withdraw()
-    VentanaProveedores(root)
+    ProveedoresView(root)
     root.mainloop()

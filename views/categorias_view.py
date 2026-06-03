@@ -2,21 +2,6 @@
 # VISTA DE CATEGORÍAS
 # ==============================
 
-"""
-Vista para probar el CRUD de categorías.
-
-Permite:
-- Crear categoría.
-- Listar categorías.
-- Buscar por nombre.
-- Seleccionar categoría.
-- Actualizar categoría.
-- Eliminar categoría.
-
-Ejecutar:
-python -m views.categorias_view
-"""
-
 import os
 import sys
 import tkinter as tk
@@ -29,21 +14,21 @@ if RUTA_PROYECTO not in sys.path:
 from controllers.categoria_controller import CategoriaController
 
 
-class VentanaCategorias(tk.Toplevel):
+class CategoriasView(tk.Toplevel):
     """
     Ventana de administración de categorías.
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, usuario=None):
         super().__init__(parent)
-
-        self.title("CRUD Categorías")
+        self.title("Categorías")
         self.geometry("850x560")
         self.minsize(780, 520)
         self.configure(bg="#ecf0f1")
 
         self.categoria_controller = CategoriaController()
         self.id_categoria_seleccionada = None
+        self.usuario = usuario
 
         self.crear_interfaz()
         self.cargar_categorias()
@@ -52,13 +37,14 @@ class VentanaCategorias(tk.Toplevel):
         contenedor = tk.Frame(self, bg="#ecf0f1")
         contenedor.pack(fill="both", expand=True, padx=25, pady=25)
 
-        tk.Label(
+        titulo = tk.Label(
             contenedor,
-            text="Administrar Categorías",
+            text="Categorías",
             bg="#ecf0f1",
             fg="#2c3e50",
             font=("Segoe UI", 24, "bold")
-        ).pack(anchor="w", pady=(0, 15))
+        )
+        titulo.pack(anchor="w", pady=(0, 15))
 
         card = tk.Frame(contenedor, bg="white", padx=20, pady=20)
         card.pack(fill="both", expand=True)
@@ -98,7 +84,7 @@ class VentanaCategorias(tk.Toplevel):
         self.entry_buscar.pack(side="left", padx=(0, 10), ipady=4)
 
         self.crear_boton(frame_busqueda, "Buscar", "#e67e22", self.buscar_categoria).pack(side="left", padx=(0, 10))
-        self.crear_boton(frame_busqueda, "Mostrar todas", "#34495e", self.cargar_categorias).pack(side="left", padx=(0, 10))
+        self.crear_boton(frame_busqueda, "Mostrar todos", "#34495e", self.cargar_categorias).pack(side="left", padx=(0, 10))
 
         frame_tabla = tk.LabelFrame(
             card,
@@ -151,18 +137,19 @@ class VentanaCategorias(tk.Toplevel):
             self.tabla.delete(fila)
 
         categorias = self.categoria_controller.listar_categorias()
-
         for categoria in categorias:
             self.tabla.insert("", "end", values=categoria)
-
         self.entry_buscar.delete(0, tk.END)
 
     def agregar_categoria(self):
         nombre = self.entry_nombre.get().strip()
         descripcion = self.obtener_descripcion()
 
-        resultado, mensaje = self.categoria_controller.registrar_categoria(nombre, descripcion)
+        if not nombre:
+            messagebox.showwarning("Aviso", "El nombre es obligatorio.")
+            return
 
+        resultado, mensaje = self.categoria_controller.registrar_categoria(nombre, descripcion)
         if resultado:
             messagebox.showinfo("Éxito", mensaje)
             self.limpiar_formulario()
@@ -185,19 +172,20 @@ class VentanaCategorias(tk.Toplevel):
         self.txt_descripcion.insert("1.0", valores[2])
 
     def actualizar_categoria(self):
-        if self.id_categoria_seleccionada is None:
-            messagebox.showwarning("Aviso", "Selecciona una categoría de la tabla.")
+        if not self.id_categoria_seleccionada:
+            messagebox.showwarning("Aviso", "Selecciona una categoría.")
             return
 
         nombre = self.entry_nombre.get().strip()
         descripcion = self.obtener_descripcion()
 
-        resultado, mensaje = self.categoria_controller.actualizar_categoria(
-            self.id_categoria_seleccionada,
-            nombre,
-            descripcion
-        )
+        if not nombre:
+            messagebox.showwarning("Aviso", "El nombre es obligatorio.")
+            return
 
+        resultado, mensaje = self.categoria_controller.actualizar_categoria(
+            self.id_categoria_seleccionada, nombre, descripcion
+        )
         if resultado:
             messagebox.showinfo("Éxito", mensaje)
             self.limpiar_formulario()
@@ -206,22 +194,15 @@ class VentanaCategorias(tk.Toplevel):
             messagebox.showerror("Error", mensaje)
 
     def eliminar_categoria(self):
-        if self.id_categoria_seleccionada is None:
-            messagebox.showwarning("Aviso", "Selecciona una categoría de la tabla.")
+        if not self.id_categoria_seleccionada:
+            messagebox.showwarning("Aviso", "Selecciona una categoría.")
             return
 
-        confirmar = messagebox.askyesno(
-            "Confirmar eliminación",
-            "¿Seguro que deseas eliminar esta categoría?"
-        )
-
+        confirmar = messagebox.askyesno("Confirmar", "¿Eliminar esta categoría?")
         if not confirmar:
             return
 
-        resultado, mensaje = self.categoria_controller.eliminar_categoria(
-            self.id_categoria_seleccionada
-        )
-
+        resultado, mensaje = self.categoria_controller.eliminar_categoria(self.id_categoria_seleccionada)
         if resultado:
             messagebox.showinfo("Éxito", mensaje)
             self.limpiar_formulario()
@@ -231,38 +212,20 @@ class VentanaCategorias(tk.Toplevel):
 
     def buscar_categoria(self):
         nombre = self.entry_buscar.get().strip()
-
-        if nombre == "":
+        if not nombre:
             messagebox.showwarning("Aviso", "Ingresa un nombre para buscar.")
             return
 
         categorias = self.categoria_controller.buscar_por_nombre(nombre)
-
         for fila in self.tabla.get_children():
             self.tabla.delete(fila)
-
         for categoria in categorias:
             self.tabla.insert("", "end", values=categoria)
 
     def limpiar_formulario(self):
         self.id_categoria_seleccionada = None
-
         self.entry_nombre.delete(0, tk.END)
         self.txt_descripcion.delete("1.0", tk.END)
-
         seleccion = self.tabla.selection()
         if seleccion:
             self.tabla.selection_remove(seleccion)
-
-
-def abrir_categorias(parent=None):
-    ventana = VentanaCategorias(parent)
-    ventana.grab_set()
-    return ventana
-
-
-if __name__ == "__main__":
-    root = tk.Tk()
-    root.withdraw()
-    VentanaCategorias(root)
-    root.mainloop()

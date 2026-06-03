@@ -1,23 +1,15 @@
 # ==============================
-# VISTA DE REGISTRO DE USUARIOS
+# VISTA DE USUARIOS
 # ==============================
 
 """
-Esta pantalla permite registrar usuarios nuevos en el sistema.
-
-Cumple con la parte de la documentación que pide:
-- Login.
-- Registro de usuario.
+Pantalla para registrar y administrar usuarios del sistema.
 
 Campos:
 - Nombre completo.
 - Usuario.
 - Contraseña.
-- Rol.
-
-Roles disponibles:
-- Administrador.
-- Vendedor.
+- Rol (Administrador / Vendedor).
 """
 
 import os
@@ -25,7 +17,6 @@ import sys
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-# Permite importar desde la raíz del proyecto.
 RUTA_PROYECTO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if RUTA_PROYECTO not in sys.path:
     sys.path.insert(0, RUTA_PROYECTO)
@@ -35,42 +26,32 @@ from database.conexion import conectar_bd
 
 class VentanaUsuarios(tk.Toplevel):
     """
-    Ventana para registrar usuarios.
-
-    Esta ventana puede abrirse desde el menú o desde el layout principal.
+    Ventana para administrar usuarios.
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, usuario=None):
         super().__init__(parent)
 
-        self.title("Registro de Usuarios")
-        self.geometry("600x500")
+        self.title("Usuarios")
+        self.geometry("650x550")
         self.resizable(False, False)
         self.configure(bg="#ecf0f1")
+        self.usuario_actual = usuario
 
         self.crear_interfaz()
         self.cargar_usuarios()
-
-    # ==============================
-    # CREAR INTERFAZ
-    # ==============================
 
     def crear_interfaz(self):
         """
         Crea todos los elementos visuales de la pantalla.
         """
 
-        contenedor = tk.Frame(
-            self,
-            bg="white",
-            padx=30,
-            pady=30
-        )
+        contenedor = tk.Frame(self, bg="white", padx=30, pady=30)
         contenedor.pack(fill="both", expand=True, padx=35, pady=35)
 
         titulo = tk.Label(
             contenedor,
-            text="Registro de Usuario",
+            text="Usuarios",
             font=("Segoe UI", 22, "bold"),
             bg="white",
             fg="#2c3e50"
@@ -78,23 +59,13 @@ class VentanaUsuarios(tk.Toplevel):
         titulo.pack(anchor="w", pady=(0, 20))
 
         # Nombre
-        self.entry_nombre = self.crear_campo(
-            contenedor,
-            "Nombre completo:"
-        )
+        self.entry_nombre = self.crear_campo(contenedor, "Nombre completo:")
 
         # Usuario
-        self.entry_usuario = self.crear_campo(
-            contenedor,
-            "Nombre de usuario:"
-        )
+        self.entry_usuario = self.crear_campo(contenedor, "Nombre de usuario:")
 
         # Contraseña
-        self.entry_password = self.crear_campo(
-            contenedor,
-            "Contraseña:",
-            password=True
-        )
+        self.entry_password = self.crear_campo(contenedor, "Contraseña:", password=True)
 
         # Rol
         lbl_rol = tk.Label(
@@ -121,13 +92,13 @@ class VentanaUsuarios(tk.Toplevel):
 
         btn_registrar = tk.Button(
             frame_botones,
-            text="Registrar Usuario",
+            text="Registrar",
             bg="#e67e22",
             fg="white",
             font=("Segoe UI", 10, "bold"),
             relief="flat",
             cursor="hand2",
-            width=18,
+            width=15,
             height=2,
             command=self.registrar_usuario
         )
@@ -158,13 +129,7 @@ class VentanaUsuarios(tk.Toplevel):
         lbl_lista.pack(anchor="w", pady=(15, 8))
 
         columnas = ("id", "nombre", "usuario", "rol")
-
-        self.tabla_usuarios = ttk.Treeview(
-            contenedor,
-            columns=columnas,
-            show="headings",
-            height=6
-        )
+        self.tabla_usuarios = ttk.Treeview(contenedor, columns=columnas, show="headings", height=6)
 
         self.tabla_usuarios.heading("id", text="ID")
         self.tabla_usuarios.heading("nombre", text="Nombre")
@@ -172,9 +137,9 @@ class VentanaUsuarios(tk.Toplevel):
         self.tabla_usuarios.heading("rol", text="Rol")
 
         self.tabla_usuarios.column("id", width=50, anchor="center")
-        self.tabla_usuarios.column("nombre", width=180)
-        self.tabla_usuarios.column("usuario", width=120)
-        self.tabla_usuarios.column("rol", width=120)
+        self.tabla_usuarios.column("nombre", width=200)
+        self.tabla_usuarios.column("usuario", width=130)
+        self.tabla_usuarios.column("rol", width=130)
 
         self.tabla_usuarios.pack(fill="both", expand=True)
 
@@ -204,12 +169,7 @@ class VentanaUsuarios(tk.Toplevel):
             show="*" if password else ""
         )
         entry.pack(fill="x", ipady=5)
-
         return entry
-
-    # ==============================
-    # REGISTRAR USUARIO
-    # ==============================
 
     def registrar_usuario(self):
         """
@@ -222,10 +182,7 @@ class VentanaUsuarios(tk.Toplevel):
         rol = self.combo_rol.get().strip()
 
         if nombre == "" or usuario == "" or password == "" or rol == "":
-            messagebox.showwarning(
-                "Campos vacíos",
-                "Debes llenar todos los campos."
-            )
+            messagebox.showwarning("Campos vacíos", "Debes llenar todos los campos.")
             return
 
         try:
@@ -233,48 +190,22 @@ class VentanaUsuarios(tk.Toplevel):
             cursor = conexion.cursor()
 
             cursor.execute("""
-                INSERT INTO usuario (
-                    nombre,
-                    usuario,
-                    password,
-                    rol
-                )
+                INSERT INTO usuario (nombre, usuario, password, rol)
                 VALUES (?, ?, ?, ?)
-            """, (
-                nombre,
-                usuario,
-                password,
-                rol
-            ))
+            """, (nombre, usuario, password, rol))
 
             conexion.commit()
             conexion.close()
 
-            messagebox.showinfo(
-                "Éxito",
-                "Usuario registrado correctamente."
-            )
-
+            messagebox.showinfo("Éxito", "Usuario registrado correctamente.")
             self.limpiar_formulario()
             self.cargar_usuarios()
 
         except Exception as error:
-            mensaje_error = str(error)
-
-            if "UNIQUE" in mensaje_error or "unique" in mensaje_error:
-                messagebox.showerror(
-                    "Usuario duplicado",
-                    "Ese nombre de usuario ya existe."
-                )
+            if "UNIQUE" in str(error):
+                messagebox.showerror("Usuario duplicado", "Ese nombre de usuario ya existe.")
             else:
-                messagebox.showerror(
-                    "Error",
-                    f"No se pudo registrar el usuario.\n\nDetalle: {error}"
-                )
-
-    # ==============================
-    # CARGAR USUARIOS
-    # ==============================
+                messagebox.showerror("Error", f"No se pudo registrar el usuario.\n\nDetalle: {error}")
 
     def cargar_usuarios(self):
         """
@@ -289,11 +220,7 @@ class VentanaUsuarios(tk.Toplevel):
             cursor = conexion.cursor()
 
             cursor.execute("""
-                SELECT
-                    id_usuario,
-                    nombre,
-                    usuario,
-                    rol
+                SELECT id_usuario, nombre, usuario, rol
                 FROM usuario
                 ORDER BY id_usuario ASC
             """)
@@ -302,21 +229,10 @@ class VentanaUsuarios(tk.Toplevel):
             conexion.close()
 
             for usuario in usuarios:
-                self.tabla_usuarios.insert(
-                    "",
-                    "end",
-                    values=usuario
-                )
+                self.tabla_usuarios.insert("", "end", values=usuario)
 
         except Exception as error:
-            messagebox.showerror(
-                "Error",
-                f"No se pudieron cargar los usuarios.\n\nDetalle: {error}"
-            )
-
-    # ==============================
-    # LIMPIAR FORMULARIO
-    # ==============================
+            messagebox.showerror("Error", f"No se pudieron cargar los usuarios.\n\nDetalle: {error}")
 
     def limpiar_formulario(self):
         """
@@ -329,28 +245,17 @@ class VentanaUsuarios(tk.Toplevel):
         self.combo_rol.set("Vendedor")
 
 
-# ==============================
-# FUNCIÓN PARA ABRIR USUARIOS
-# ==============================
-
-def abrir_usuarios(parent=None):
+def abrir_usuarios(parent=None, usuario=None):
     """
     Abre la ventana de usuarios.
     """
-
-    ventana = VentanaUsuarios(parent)
+    ventana = VentanaUsuarios(parent, usuario)
     ventana.grab_set()
     return ventana
 
 
-# ==============================
-# PRUEBA DIRECTA
-# ==============================
-
 if __name__ == "__main__":
     root = tk.Tk()
     root.withdraw()
-
     VentanaUsuarios(root)
     root.mainloop()
-    

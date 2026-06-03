@@ -1,22 +1,18 @@
 # ==============================
-# VISTA DE PRUEBA CRUD PRODUCTOS
+# VISTA DE PRODUCTOS
 # ==============================
 
 """
-Esta vista sirve para probar de forma más completa el CRUD de productos.
+Vista para la gestión completa de productos.
 
 Permite:
 - Crear producto.
-- Leer/listar productos.
+- Listar productos.
 - Buscar producto por código.
 - Seleccionar producto.
 - Actualizar producto.
 - Eliminar producto.
 - Actualizar cantidad y ubicación de inventario.
-
-Esta vista es independiente del layout principal.
-Se puede ejecutar con:
-python -m views.productos_view
 """
 
 import os
@@ -31,15 +27,15 @@ if RUTA_PROYECTO not in sys.path:
 from controllers.producto_controller import ProductoController
 
 
-class VentanaProductos(tk.Toplevel):
+class ProductosView(tk.Toplevel):
     """
-    Ventana para probar el CRUD completo de productos.
+    Ventana de administración de productos.
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, usuario=None):
         super().__init__(parent)
 
-        self.title("Prueba CRUD - Productos")
+        self.title("Productos")
         self.geometry("1120x680")
         self.minsize(1000, 620)
         self.configure(bg="#ecf0f1")
@@ -48,6 +44,7 @@ class VentanaProductos(tk.Toplevel):
         self.id_producto_seleccionado = None
         self.id_categoria_actual = None
         self.id_proveedor_actual = None
+        self.usuario = usuario
 
         self.crear_interfaz()
         self.cargar_productos()
@@ -57,16 +54,12 @@ class VentanaProductos(tk.Toplevel):
     # ==============================
 
     def crear_interfaz(self):
-        """
-        Crea la interfaz visual de la prueba CRUD.
-        """
-
         contenedor = tk.Frame(self, bg="#ecf0f1")
         contenedor.pack(fill="both", expand=True, padx=25, pady=25)
 
         titulo = tk.Label(
             contenedor,
-            text="Prueba CRUD de Productos",
+            text="Productos",
             bg="#ecf0f1",
             fg="#2c3e50",
             font=("Segoe UI", 24, "bold")
@@ -96,7 +89,7 @@ class VentanaProductos(tk.Toplevel):
         self.entry_cantidad = self.crear_campo(frame_formulario, "Cantidad:", 1, 2)
         self.entry_ubicacion = self.crear_campo(frame_formulario, "Ubicación:", 1, 4)
 
-        # Botones CRUD
+        # Botones
         frame_botones = tk.Frame(card, bg="white")
         frame_botones.pack(fill="x", pady=(0, 15))
 
@@ -186,10 +179,6 @@ class VentanaProductos(tk.Toplevel):
         self.tabla_productos.bind("<<TreeviewSelect>>", self.seleccionar_producto)
 
     def crear_campo(self, parent, texto, fila, columna):
-        """
-        Crea una etiqueta y un campo de texto.
-        """
-
         tk.Label(
             parent,
             text=texto,
@@ -200,14 +189,9 @@ class VentanaProductos(tk.Toplevel):
 
         entry = tk.Entry(parent, font=("Segoe UI", 10), width=24)
         entry.grid(row=fila, column=columna + 1, sticky="w", padx=(0, 20), pady=8, ipady=4)
-
         return entry
 
     def crear_boton(self, parent, texto, color, comando):
-        """
-        Crea un botón estándar.
-        """
-
         return tk.Button(
             parent,
             text=texto,
@@ -226,10 +210,6 @@ class VentanaProductos(tk.Toplevel):
     # ==============================
 
     def obtener_datos(self):
-        """
-        Obtiene datos del formulario.
-        """
-
         return {
             "codigo": self.entry_codigo.get().strip(),
             "nombre": self.entry_nombre.get().strip(),
@@ -240,27 +220,12 @@ class VentanaProductos(tk.Toplevel):
         }
 
     def cargar_productos(self):
-        """
-        Lista todos los productos en la tabla.
-        """
-
         for fila in self.tabla_productos.get_children():
             self.tabla_productos.delete(fila)
 
         productos = self.producto_controller.listar_productos()
 
         for producto in productos:
-            # Estructura esperada:
-            # 0 id_producto
-            # 1 nombre
-            # 2 codigo
-            # 3 precio
-            # 4 stock_minimo
-            # 5 id_categoria
-            # 6 id_proveedor
-            # 7 cantidad_actual
-            # 8 ubicacion
-
             cantidad = producto[7] if len(producto) > 7 else 0
             ubicacion = producto[8] if len(producto) > 8 else ""
 
@@ -281,10 +246,6 @@ class VentanaProductos(tk.Toplevel):
         self.entry_buscar.delete(0, tk.END)
 
     def agregar_producto(self):
-        """
-        Crea un producto.
-        """
-
         datos = self.obtener_datos()
 
         if datos["codigo"] == "" or datos["nombre"] == "" or datos["precio"] == "":
@@ -317,12 +278,7 @@ class VentanaProductos(tk.Toplevel):
             messagebox.showerror("Error", mensaje)
 
     def seleccionar_producto(self, event):
-        """
-        Carga datos del producto seleccionado.
-        """
-
         seleccion = self.tabla_productos.selection()
-
         if not seleccion:
             return
 
@@ -330,10 +286,9 @@ class VentanaProductos(tk.Toplevel):
         self.id_producto_seleccionado = valores[0]
 
         producto_completo = self.producto_controller.buscar_por_id(self.id_producto_seleccionado)
-
         if producto_completo:
-            self.id_categoria_actual = producto_completo[5]
-            self.id_proveedor_actual = producto_completo[6]
+            self.id_categoria_actual = producto_completo[5] if len(producto_completo) > 5 else None
+            self.id_proveedor_actual = producto_completo[6] if len(producto_completo) > 6 else None
 
         self.entry_codigo.delete(0, tk.END)
         self.entry_codigo.insert(0, valores[1])
@@ -354,10 +309,6 @@ class VentanaProductos(tk.Toplevel):
         self.entry_ubicacion.insert(0, valores[6])
 
     def actualizar_producto(self):
-        """
-        Actualiza el producto seleccionado.
-        """
-
         if self.id_producto_seleccionado is None:
             messagebox.showwarning("Aviso", "Selecciona un producto de la tabla.")
             return
@@ -405,10 +356,6 @@ class VentanaProductos(tk.Toplevel):
             messagebox.showerror("Error", mensaje_inv)
 
     def eliminar_producto(self):
-        """
-        Elimina el producto seleccionado.
-        """
-
         if self.id_producto_seleccionado is None:
             messagebox.showwarning("Aviso", "Selecciona un producto de la tabla.")
             return
@@ -417,14 +364,10 @@ class VentanaProductos(tk.Toplevel):
             "Confirmar eliminación",
             "¿Seguro que deseas eliminar este producto?"
         )
-
         if not confirmar:
             return
 
-        resultado, mensaje = self.producto_controller.eliminar_producto(
-            self.id_producto_seleccionado
-        )
-
+        resultado, mensaje = self.producto_controller.eliminar_producto(self.id_producto_seleccionado)
         if resultado:
             messagebox.showinfo("Éxito", mensaje)
             self.limpiar_formulario()
@@ -433,12 +376,7 @@ class VentanaProductos(tk.Toplevel):
             messagebox.showerror("Error", mensaje)
 
     def buscar_producto(self):
-        """
-        Busca un producto por código.
-        """
-
         codigo = self.entry_buscar.get().strip()
-
         if codigo == "":
             messagebox.showwarning("Aviso", "Ingresa un código para buscar.")
             return
@@ -451,7 +389,6 @@ class VentanaProductos(tk.Toplevel):
         if producto:
             cantidad = producto[7] if len(producto) > 7 else 0
             ubicacion = producto[8] if len(producto) > 8 else ""
-
             self.tabla_productos.insert(
                 "",
                 "end",
@@ -469,10 +406,6 @@ class VentanaProductos(tk.Toplevel):
             messagebox.showinfo("Sin resultados", "No se encontró un producto con ese código.")
 
     def limpiar_formulario(self):
-        """
-        Limpia el formulario.
-        """
-
         self.id_producto_seleccionado = None
         self.id_categoria_actual = None
         self.id_proveedor_actual = None
@@ -489,12 +422,11 @@ class VentanaProductos(tk.Toplevel):
             self.tabla_productos.selection_remove(seleccion)
 
 
-def abrir_productos(parent=None):
+def abrir_productos(parent=None, usuario=None):
     """
     Abre la ventana de productos.
     """
-
-    ventana = VentanaProductos(parent)
+    ventana = ProductosView(parent, usuario)
     ventana.grab_set()
     return ventana
 
@@ -502,6 +434,5 @@ def abrir_productos(parent=None):
 if __name__ == "__main__":
     root = tk.Tk()
     root.withdraw()
-
-    VentanaProductos(root)
+    ProductosView(root)
     root.mainloop()

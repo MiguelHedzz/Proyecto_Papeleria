@@ -1,133 +1,140 @@
-"""
-Servicio de Autenticación.
-Maneja la lógica de inicio de sesión, registro y validación de usuarios.
-"""
+# ==============================
+# SERVICIO DE AUTENTICACION
+# ==============================
 
-from database.conexion import conectar_bd
-from models.usuario import Usuario
-
-
-def validar_login(usuario, password):
+class AuthService:
     """
-    Valida las credenciales de un usuario.
+    Servicio de autenticación.
 
-    Args:
-        usuario (str): Nombre de usuario.
-        password (str): Contraseña del usuario.
+    Este servicio se encarga de la lógica de negocio relacionada
+    con la autenticación de usuarios.
 
-    Returns:
-        dict: Datos del usuario si las credenciales son válidas, None si no.
+    Se encarga de:
+    - Validar credenciales de inicio de sesión
+    - Verificar roles de usuario
+    - Manejar la sesión actual
     """
-    conexion = conectar_bd()
-    cursor = conexion.cursor()
 
-    cursor.execute("""
-        SELECT id_usuario, nombre, usuario, rol
-        FROM usuario
-        WHERE usuario = ? AND password = ?
-    """, (usuario, password))
+    def __init__(self):
+        """
+        Inicializa el servicio de autenticación.
+        """
+        self._usuario_controller = None
+        self.usuario_actual = None
 
-    row = cursor.fetchone()
-    conexion.close()
+    def _get_controller(self):
+        """
+        Obtiene o crea el controlador de usuarios.
+        Esto evita importación circular.
+        """
+        if self._usuario_controller is None:
+            from controllers.usuario_controller import UsuarioController
+            self._usuario_controller = UsuarioController()
+        return self._usuario_controller
 
-    return dict(row) if row else None
+    # ==============================
+    # AUTENTICAR USUARIO
+    # ==============================
 
+    def autenticar(self, nombre_usuario, password):
+        """
+        Valida las credenciales de un usuario.
 
-def registrar_usuario(usuario_obj):
-    """
-    Registra un nuevo usuario en el sistema.
+        Parámetros:
+        nombre_usuario: Nombre de usuario ingresado en el login.
+        password: Contraseña ingresada en el login.
 
-    Args:
-        usuario_obj (Usuario): Objeto Usuario con los datos a registrar.
+        Retorna:
+        Un objeto Usuario si las credenciales son correctas.
+        None si son incorrectas o si los campos están vacíos.
+        """
+        if not nombre_usuario or not password:
+            return None
 
-    Returns:
-        int: ID del usuario registrado, o None si el usuario ya existe.
-    """
-    conexion = conectar_bd()
-    cursor = conexion.cursor()
+        controller = self._get_controller()
+        usuario = controller.validar_login(nombre_usuario, password)
 
-    try:
-        cursor.execute("""
-            INSERT INTO usuario (nombre, usuario, password, rol)
-            VALUES (?, ?, ?, ?)
-        """, (usuario_obj.nombre, usuario_obj.usuario,
-              usuario_obj.password, usuario_obj.rol))
+        if usuario:
+            self.usuario_actual = usuario
 
-        id_usuario = cursor.lastrowid
-        conexion.commit()
-        return id_usuario
+        return usuario
 
-    except Exception:
-        conexion.rollback()
-        return None
+    # ==============================
+    # CERRAR SESIÓN
+    # ==============================
 
-    finally:
-        conexion.close()
+    def cerrar_sesion(self):
+        """
+        Cierra la sesión actual del usuario.
+        """
+        self.usuario_actual = None
 
+    # ==============================
+    # VERIFICAR SI ESTÁ AUTENTICADO
+    # ==============================
 
-def listar_usuarios():
-    """
-    Obtiene todos los usuarios registrados.
+    def esta_autenticado(self):
+        """
+        Verifica si hay un usuario con sesión activa.
 
-    Returns:
-        list: Lista de diccionarios con los datos de cada usuario.
-    """
-    conexion = conectar_bd()
-    cursor = conexion.cursor()
+        Retorna True si hay un usuario autenticado.
+        """
+        return self.usuario_actual is not None
 
-    cursor.execute("""
-        SELECT id_usuario, nombre, usuario, rol
-        FROM usuario
-        ORDER BY nombre
-    """)
+    # ==============================
+    # VERIFICAR ROL ADMINISTRADOR
+    # ==============================
 
-    usuarios = [dict(row) for row in cursor.fetchall()]
-    conexion.close()
-    return usuarios
+    def es_administrador(self):
+        """
+        Verifica si el usuario actual tiene rol de administrador.
+        """
+        if self.usuario_actual and self.usuario_actual.rol == "Administrador":
+            return True
+        return False
 
+    # ==============================
+    # VERIFICAR ROL VENDEDOR
+    # ==============================
 
-def actualizar_usuario(usuario_obj):
-    """
-    Actualiza los datos de un usuario existente.
+    def es_vendedor(self):
+        """
+        Verifica si el usuario actual tiene rol de vendedor.
+        """
+        if self.usuario_actual and self.usuario_actual.rol == "Vendedor":
+            return True
+        return False
 
-    Args:
-        usuario_obj (Usuario): Objeto Usuario con datos actualizados.
+    # ==============================
+    # OBTENER USUARIO ACTUAL
+    # ==============================
 
-    Returns:
-        bool: True si se actualizó correctamente.
-    """
-    conexion = conectar_bd()
-    cursor = conexion.cursor()
+    def obtener_usuario_actual(self):
+        """
+        Retorna el usuario actualmente autenticado.
+        """
+        return self.usuario_actual
 
-    cursor.execute("""
-        UPDATE usuario
-        SET nombre = ?, usuario = ?, password = ?, rol = ?
-        WHERE id_usuario = ?
-    """, (usuario_obj.nombre, usuario_obj.usuario,
-          usuario_obj.password, usuario_obj.rol,
-          usuario_obj.id_usuario))
+    # ==============================
+    # OBTENER NOMBRE DEL USUARIO ACTUAL
+    # ==============================
 
-    filas_afectadas = cursor.rowcount
-    conexion.commit()
-    conexion.close()
+    def obtener_nombre_usuario_actual(self):
+        """
+        Retorna el nombre del usuario actual.
+        """
+        if self.usuario_actual:
+            return self.usuario_actual.nombre
+        return "Invitado"
 
-    return filas_afectadas > 0
+    # ==============================
+    # OBTENER ROL DEL USUARIO ACTUAL
+    # ==============================
 
-
-def eliminar_usuario(id_usuario):
-    """
-    Elimina un usuario del sistema.
-
-    Args:
-        id_usuario (int): ID del usuario a eliminar.
-
-    Returns:
-        bool: True si se eliminó correctamente.
-    """
-    conexion = conectar_bd()
-    cursor = conexion.cursor()
-
-    cursor.execute("DELETE FROM usuario WHERE id_usuario = ?", (id_usuario,))
-    conexion.commit()
-    conexion.close()
-    return True
+    def obtener_rol_actual(self):
+        """
+        Retorna el rol del usuario actual.
+        """
+        if self.usuario_actual:
+            return self.usuario_actual.rol
+        return "Sin rol"

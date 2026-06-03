@@ -5,23 +5,16 @@
 """
 Este archivo contiene la lógica principal para procesar ventas.
 
-Corrige la integración entre la pantalla Nueva Venta y la base de datos.
-
-Qué hace:
-- Valida que la venta tenga productos.
-- Valida cantidades y precios.
-- Verifica que exista stock suficiente.
-- Calcula el total.
-- Registra la venta en la tabla venta.
-- Registra el detalle en detalle_venta.
-- Descuenta inventario.
-
-Este archivo no dibuja pantallas. Solo maneja la lógica de ventas.
+Funcionalidades:
+- Validar stock disponible antes de vender
+- Registrar venta con método de pago (Efectivo/Tarjeta)
+- Descontar inventario automáticamente
+- Generar alertas de stock bajo
+- Calcular totales
 """
 
 import sqlite3
 from datetime import datetime
-
 from database.conexion import conectar_bd
 from controllers.venta_controller import VentaController
 from controllers.inventario_controller import InventarioController
@@ -32,11 +25,21 @@ class VentaService:
     """
     Servicio de ventas.
 
-    Esta clase funciona como intermediaria entre la interfaz gráfica
-    y la base de datos.
+    Esta clase contiene toda la lógica de negocio para procesar ventas:
+    - Validación de productos y stock
+    - Registro de ventas en la base de datos
+    - Descuento de inventario
+    - Generación automática de alertas de stock bajo
     """
 
     def __init__(self):
+        """
+        Inicializa el servicio de ventas.
+
+        Crea instancias de los controladores necesarios:
+        - VentaController: Para operaciones CRUD de ventas
+        - InventarioController: Para consultar y actualizar stock
+        """
         self.venta_controller = VentaController()
         self.inventario_controller = InventarioController()
 
@@ -47,28 +50,21 @@ class VentaService:
     def obtener_precio_producto(self, id_producto):
         """
         Obtiene el precio de un producto desde la base de datos.
-        """
 
+        Parámetros:
+        id_producto: Identificador único del producto.
+
+        Retorna:
+        El precio del producto como float, o None si no se encuentra.
+        """
         try:
             conexion = conectar_bd()
             cursor = conexion.cursor()
-
-            cursor.execute("""
-                SELECT precio
-                FROM producto
-                WHERE id_producto = ?
-            """, (id_producto,))
-
+            cursor.execute("SELECT precio FROM producto WHERE id_producto = ?", (id_producto,))
             resultado = cursor.fetchone()
             conexion.close()
-
-            if resultado:
-                return resultado[0]
-
-            return None
-
-        except sqlite3.Error as error:
-            print(f"Error al obtener precio del producto: {error}")
+            return resultado[0] if resultado else None
+        except sqlite3.Error:
             return None
 
     # ==============================
@@ -79,16 +75,12 @@ class VentaService:
         """
         Convierte la lista de productos a un formato estándar.
 
-        Formato usado:
-        {
-            "id_producto": 1,
-            "cantidad": 2,
-            "precio": 45.50
-        }
+        Parámetros:
+        productos: Lista de diccionarios con datos de productos.
 
-        También acepta "precio_unitario" por compatibilidad.
+        Retorna:
+        Lista de productos normalizados con id_producto, cantidad y precio.
         """
-
         productos_normalizados = []
 
         for producto in productos:
@@ -116,16 +108,21 @@ class VentaService:
 
     def validar_productos(self, productos):
         """
-        Valida los productos de una venta.
+        Valida que los productos de una venta sean correctos.
 
-        Revisa:
-        - Que haya al menos un producto.
-        - Que cada producto tenga ID.
-        - Que la cantidad sea entera y mayor que cero.
-        - Que el precio sea numérico y mayor que cero.
-        - Que haya stock suficiente.
+        Validaciones:
+        1. La venta debe tener al menos un producto
+        2. Cada producto debe tener ID válido
+        3. Cantidad debe ser entero positivo
+        4. Precio debe ser número positivo
+        5. Stock disponible debe ser suficiente
+
+        Parámetros:
+        productos: Lista de productos normalizados.
+
+        Retorna:
+        Tupla (bool, str): True y mensaje si es válido, False y error si no.
         """
-
         if not productos:
             return False, "La venta debe tener al menos un producto."
 
@@ -157,12 +154,11 @@ class VentaService:
 
             cantidades_por_producto[id_producto] = cantidades_por_producto.get(id_producto, 0) + cantidad
 
-        # Validamos stock acumulado por producto.
         for id_producto, cantidad_total in cantidades_por_producto.items():
             stock_actual = self.inventario_controller.obtener_stock(id_producto)
 
             if cantidad_total > stock_actual:
-                return False, f"No hay suficiente existencia para el producto con ID {id_producto}."
+                return False, f"No hay suficiente existencia. Stock disponible: {stock_actual}"
 
         return True, "Productos válidos."
 
@@ -173,8 +169,13 @@ class VentaService:
     def calcular_total(self, productos):
         """
         Calcula el total de la venta.
-        """
 
+        Parámetros:
+        productos: Lista de productos normalizados.
+
+        Retorna:
+        El total de la venta como float.
+        """
         total = 0.0
 
         for producto in productos:
@@ -185,28 +186,36 @@ class VentaService:
         return total
 
     # ==============================
-    # PROCESAR VENTA
+    # PROCESAR VENTA COMPLETA
     # ==============================
 
     def procesar_venta(self, productos, id_usuario=1, metodo_pago="Efectivo"):
         """
         Procesa una venta completa.
 
-        Flujo:
-        1. Normaliza productos.
-        2. Valida productos.
-        3. Calcula total.
-        4. Guarda venta.
-        5. Guarda detalle.
-        6. Descuenta inventario.
-        """
+        Flujo completo:
+        1. Normaliza los productos
+        2. Valida productos y stock
+        3. Calcula el total
+        4. Registra la venta
+        5. Registra los detalles
+        6. Descuenta el inventario
+        7. Genera alertas de stock bajo
 
+        Parámetros:
+        productos: Lista de productos vendidos
+        id_usuario: ID del usuario que realiza la venta
+        metodo_pago: Forma de pago (Efectivo o Tarjeta)
+
+        Retorna:
+        Tupla (bool, str): True y mensaje de éxito, False y mensaje de error.
+        """
         if id_usuario is None:
             return False, "Debe existir un usuario para registrar la venta."
 
         productos = self.normalizar_productos(productos)
-
         resultado, mensaje = self.validar_productos(productos)
+
         if not resultado:
             return False, mensaje
 
@@ -217,18 +226,20 @@ class VentaService:
             conexion = conectar_bd()
             cursor = conexion.cursor()
 
-            cursor.execute("""
-                INSERT INTO venta (
-                    fecha,
-                    total,
-                    id_usuario
-                )
-                VALUES (?, ?, ?)
-            """, (
-                fecha,
-                total,
-                id_usuario
-            ))
+            # Verificar si la columna metodo_pago existe
+            cursor.execute("PRAGMA table_info(venta)")
+            columnas = [col[1] for col in cursor.fetchall()]
+
+            if 'metodo_pago' in columnas:
+                cursor.execute("""
+                    INSERT INTO venta (fecha, total, id_usuario, metodo_pago)
+                    VALUES (?, ?, ?, ?)
+                """, (fecha, total, id_usuario, metodo_pago))
+            else:
+                cursor.execute("""
+                    INSERT INTO venta (fecha, total, id_usuario)
+                    VALUES (?, ?, ?)
+                """, (fecha, total, id_usuario))
 
             id_venta = cursor.lastrowid
 
@@ -238,80 +249,101 @@ class VentaService:
                 precio = float(producto.get("precio"))
                 subtotal = cantidad * precio
 
+                # Registrar detalle de venta
                 cursor.execute("""
-                    INSERT INTO detalle_venta (
-                        id_venta,
-                        id_producto,
-                        cantidad,
-                        subtotal
-                    )
+                    INSERT INTO detalle_venta (id_venta, id_producto, cantidad, subtotal)
                     VALUES (?, ?, ?, ?)
-                """, (
-                    id_venta,
-                    id_producto,
-                    cantidad,
-                    subtotal
-                ))
+                """, (id_venta, id_producto, cantidad, subtotal))
 
+                # Descontar stock
                 cursor.execute("""
                     UPDATE inventario
                     SET cantidad_actual = cantidad_actual - ?
                     WHERE id_producto = ?
-                """, (
-                    cantidad,
-                    id_producto
-                ))
+                """, (cantidad, id_producto))
+
+                # Obtener nombre del producto para la alerta
+                cursor.execute("SELECT nombre FROM producto WHERE id_producto = ?", (id_producto,))
+                nombre_producto = cursor.fetchone()[0]
+
+                # Verificar stock bajo después de descontar
+                cursor.execute("""
+                    SELECT cantidad_actual, stock_minimo
+                    FROM inventario i
+                    JOIN producto p ON i.id_producto = p.id_producto
+                    WHERE i.id_producto = ?
+                """, (id_producto,))
+                resultado_stock = cursor.fetchone()
+
+                if resultado_stock:
+                    cantidad_actual = resultado_stock[0]
+                    stock_minimo = resultado_stock[1]
+
+                    if cantidad_actual <= stock_minimo:
+                        # Verificar si ya existe una alerta pendiente
+                        cursor.execute("""
+                            SELECT COUNT(*) FROM alerta
+                            WHERE id_producto = ? AND atendida = 0
+                        """, (id_producto,))
+                        existe_alerta = cursor.fetchone()[0]
+
+                        if existe_alerta == 0:
+                            mensaje_alerta = f"STOCK BAJO: {nombre_producto}. Quedan {cantidad_actual} unidades (Minimo: {stock_minimo})"
+                            cursor.execute("""
+                                INSERT INTO alerta (id_producto, mensaje, atendida)
+                                VALUES (?, ?, 0)
+                            """, (id_producto, mensaje_alerta))
 
             conexion.commit()
             conexion.close()
-
             return True, f"Venta registrada correctamente. Total: ${total:.2f}"
 
         except sqlite3.Error as error:
             return False, f"Error al registrar venta: {error}"
 
     # ==============================
-    # MÉTODOS AUXILIARES
+    # REGISTRAR VENTA (ALIAS)
     # ==============================
 
-    def registrar_venta(self, productos, id_usuario=1):
+    def registrar_venta(self, productos, id_usuario=1, metodo_pago="Efectivo"):
         """
-        Método alternativo para registrar venta.
+        Método alternativo para registrar una venta.
+        Es un alias de procesar_venta() para mantener compatibilidad.
         """
+        return self.procesar_venta(productos, id_usuario, metodo_pago)
 
-        return self.procesar_venta(productos, id_usuario)
+    # ==============================
+    # OBTENER VENTAS
+    # ==============================
 
     def obtener_ventas(self):
-        """
-        Obtiene todas las ventas registradas.
-        """
-
+        """Obtiene todas las ventas registradas."""
         return self.venta_controller.obtener_ventas()
 
     def listar_ventas(self):
-        """
-        Método alternativo para listar ventas.
-        """
-
+        """Método alternativo para listar ventas."""
         return self.obtener_ventas()
 
-    def obtener_detalle_venta(self, venta_id):
-        """
-        Obtiene los productos incluidos en una venta.
-        """
+    # ==============================
+    # OBTENER DETALLE DE VENTA
+    # ==============================
 
+    def obtener_detalle_venta(self, venta_id):
+        """Obtiene los productos incluidos en una venta específica."""
         if venta_id is None:
             return []
-
         return self.venta_controller.obtener_detalle_venta(venta_id)
+
+    # ==============================
+    # ELIMINAR VENTA
+    # ==============================
 
     def eliminar_venta(self, venta_id):
         """
-        Elimina una venta.
+        Elimina una venta y sus detalles.
 
-        En esta versión escolar, eliminar una venta no devuelve stock.
+        Nota: En esta versión escolar, eliminar una venta NO devuelve el stock.
         """
-
         if venta_id is None:
             return False, "Debe seleccionar una venta."
 
@@ -328,7 +360,6 @@ class VentaService:
 
 if __name__ == "__main__":
     servicio = VentaService()
-
     print("Ventas registradas:")
     for venta in servicio.obtener_ventas():
         print(venta)

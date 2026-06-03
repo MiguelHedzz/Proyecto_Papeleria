@@ -1,32 +1,48 @@
-# Importamos la función conectar_bd desde el archivo conexion.py.
-# Esta función nos permite conectarnos a la base de datos SQLite.
-from .conexion import conectar_bd
-
-
 # ==============================
 # CREACIÓN DE TABLAS
 # ==============================
+
+"""
+Este archivo se encarga de crear todas las tablas necesarias
+para el funcionamiento del sistema de inventario.
+
+Si las tablas ya existen, no las vuelve a crear.
+Esto se logra usando CREATE TABLE IF NOT EXISTS.
+
+También verifica que la tabla 'venta' tenga la columna 'metodo_pago'
+y que la tabla 'respaldo' exista.
+"""
+
+from .conexion import conectar_bd
+
 
 def crear_tablas():
     """
     Esta función crea todas las tablas necesarias para el sistema.
 
-    Si las tablas ya existen, no las vuelve a crear.
-    Esto se logra usando CREATE TABLE IF NOT EXISTS.
+    Tablas creadas:
+    - usuario: Almacena los usuarios del sistema
+    - categoria: Clasifica los productos
+    - proveedor: Almacena información de proveedores
+    - producto: Información principal de cada producto
+    - inventario: Controla la cantidad actual y ubicación de productos
+    - venta: Registra las ventas realizadas
+    - detalle_venta: Guarda los productos incluidos en cada venta
+    - alerta: Registra alertas de stock bajo
+    - respaldo: Guarda el historial de copias de seguridad
+
+    También inserta un usuario administrador por defecto:
+    - Usuario: admin
+    - Contraseña: admin123
     """
 
-    # Creamos una conexión con la base de datos.
     conexion = conectar_bd()
-
-    # El cursor nos permite ejecutar instrucciones SQL.
     cursor = conexion.cursor()
 
     # ==============================
     # TABLA USUARIO
     # ==============================
 
-    # Esta tabla guarda los usuarios que pueden entrar al sistema.
-    # Por ejemplo: administrador o vendedor.
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS usuario (
             id_usuario INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -41,8 +57,6 @@ def crear_tablas():
     # TABLA CATEGORÍA
     # ==============================
 
-    # Esta tabla guarda las categorías de productos.
-    # Ejemplo: útiles escolares, oficina, papelería, etc.
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS categoria (
             id_categoria INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -55,8 +69,6 @@ def crear_tablas():
     # TABLA PROVEEDOR
     # ==============================
 
-    # Esta tabla guarda los proveedores de la papelería.
-    # Los proveedores son quienes suministran productos al negocio.
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS proveedor (
             id_proveedor INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -70,8 +82,6 @@ def crear_tablas():
     # TABLA PRODUCTO
     # ==============================
 
-    # Esta tabla guarda la información principal de cada producto.
-    # Se relaciona con categoria y proveedor mediante llaves foráneas.
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS producto (
             id_producto INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -90,8 +100,6 @@ def crear_tablas():
     # TABLA INVENTARIO
     # ==============================
 
-    # Esta tabla guarda la cantidad disponible de cada producto.
-    # Cada registro de inventario se relaciona con un producto.
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS inventario (
             id_inventario INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -106,8 +114,6 @@ def crear_tablas():
     # TABLA VENTA
     # ==============================
 
-    # Esta tabla guarda las ventas realizadas.
-    # Cada venta se relaciona con el usuario que la realizó.
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS venta (
             id_venta INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -122,8 +128,6 @@ def crear_tablas():
     # TABLA DETALLE DE VENTA
     # ==============================
 
-    # Esta tabla guarda los productos incluidos en cada venta.
-    # Por ejemplo, una venta puede tener varios productos.
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS detalle_venta (
             id_detalle INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -140,8 +144,6 @@ def crear_tablas():
     # TABLA ALERTA
     # ==============================
 
-    # Esta tabla guarda las alertas de productos con stock bajo.
-    # Se usa cuando la cantidad disponible llega al stock mínimo.
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS alerta (
             id_alerta INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -153,11 +155,21 @@ def crear_tablas():
     """)
 
     # ==============================
+    # TABLA RESPALDO
+    # ==============================
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS respaldo (
+            id_respaldo INTEGER PRIMARY KEY AUTOINCREMENT,
+            fecha TEXT NOT NULL,
+            ruta_archivo TEXT NOT NULL
+        )
+    """)
+
+    # ==============================
     # USUARIO ADMINISTRADOR POR DEFECTO
     # ==============================
 
-    # Insertamos un usuario administrador inicial.
-    # INSERT OR IGNORE evita que se duplique si ya existe.
     cursor.execute("""
         INSERT OR IGNORE INTO usuario (
             id_usuario,
@@ -175,21 +187,26 @@ def crear_tablas():
         )
     """)
 
-    # Guardamos todos los cambios realizados en la base de datos.
-    conexion.commit()
+    # ==============================
+    # AGREGAR COLUMNA MÉTODO DE PAGO (SI NO EXISTE)
+    # ==============================
 
-    # Cerramos la conexión para liberar recursos.
+    cursor.execute("PRAGMA table_info(venta)")
+    columnas = [col[1] for col in cursor.fetchall()]
+
+    if 'metodo_pago' not in columnas:
+        cursor.execute("ALTER TABLE venta ADD COLUMN metodo_pago TEXT DEFAULT 'Efectivo'")
+        print("✅ Columna 'metodo_pago' agregada a la tabla venta")
+
+    # ==============================
+    # GUARDAR CAMBIOS Y CERRAR
+    # ==============================
+
+    conexion.commit()
     conexion.close()
 
-    # Mostramos un mensaje en consola para confirmar que todo salió bien.
-    print("Tablas creadas correctamente.")
+    print("✅ Tablas creadas/verificadas correctamente.")
 
 
-# ==============================
-# EJECUCIÓN DE PRUEBA
-# ==============================
-
-# Esta parte se ejecuta solamente si abrimos directamente este archivo.
-# Sirve para probar que las tablas se creen correctamente.
 if __name__ == "__main__":
     crear_tablas()
