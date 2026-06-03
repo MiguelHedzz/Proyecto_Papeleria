@@ -1,375 +1,323 @@
-import sqlite3
+# ==============================
+# ARCHIVO PRINCIPAL DEL SISTEMA
+# ==============================
+
+"""
+Este archivo inicia la aplicación.
+
+Funciones principales:
+- Crear las tablas de la base de datos.
+- Mostrar la pantalla de inicio de sesión.
+- Validar usuario y contraseña.
+- Abrir el layout principal basado en el diseño de Figma.
+"""
+
+import os
+import sys
 import tkinter as tk
 from tkinter import messagebox
+from dataclasses import dataclass
+
+# Permite importar correctamente desde la raíz del proyecto.
+RUTA_PROYECTO = os.path.dirname(os.path.abspath(__file__))
+if RUTA_PROYECTO not in sys.path:
+    sys.path.insert(0, RUTA_PROYECTO)
+
+from database.crear_tablas import crear_tablas
+from database.conexion import conectar_bd
+from views.layout_view import LayoutPrincipal
 
 
 # ==============================
-# CONEXIÓN A BASE DE DATOS
+# CLASE PARA GUARDAR SESIÓN
 # ==============================
 
-def conectar_bd():
-    conexion = sqlite3.connect("inventario_papeleria.db")
-    return conexion
+@dataclass
+class UsuarioSesion:
+    """
+    Guarda los datos del usuario que inició sesión.
 
+    Estos datos se mandan al LayoutPrincipal para mostrar:
+    - Nombre del usuario.
+    - Rol del usuario.
+    """
 
-def crear_tablas():
-    conexion = conectar_bd()
-    cursor = conexion.cursor()
-
-    # Tabla de usuarios
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS usuario (
-            id_usuario INTEGER PRIMARY KEY AUTOINCREMENT,
-            nombre TEXT NOT NULL,
-            usuario TEXT NOT NULL UNIQUE,
-            password TEXT NOT NULL,
-            rol TEXT NOT NULL
-        )
-    """)
-
-    # Tabla de categorías
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS categoria (
-            id_categoria INTEGER PRIMARY KEY AUTOINCREMENT,
-            nombre TEXT NOT NULL,
-            descripcion TEXT
-        )
-    """)
-
-    # Tabla de proveedores
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS proveedor (
-            id_proveedor INTEGER PRIMARY KEY AUTOINCREMENT,
-            nombre TEXT NOT NULL,
-            telefono TEXT,
-            correo TEXT
-        )
-    """)
-
-    # Tabla de productos
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS producto (
-            id_producto INTEGER PRIMARY KEY AUTOINCREMENT,
-            nombre TEXT NOT NULL,
-            codigo TEXT NOT NULL UNIQUE,
-            precio REAL NOT NULL,
-            stock_minimo INTEGER NOT NULL,
-            id_categoria INTEGER,
-            id_proveedor INTEGER,
-            FOREIGN KEY (id_categoria) REFERENCES categoria(id_categoria),
-            FOREIGN KEY (id_proveedor) REFERENCES proveedor(id_proveedor)
-        )
-    """)
-
-    # Tabla de inventario
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS inventario (
-            id_inventario INTEGER PRIMARY KEY AUTOINCREMENT,
-            id_producto INTEGER NOT NULL,
-            cantidad_actual INTEGER NOT NULL,
-            ubicacion TEXT,
-            FOREIGN KEY (id_producto) REFERENCES producto(id_producto)
-        )
-    """)
-
-    # Tabla de ventas
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS venta (
-            id_venta INTEGER PRIMARY KEY AUTOINCREMENT,
-            fecha TEXT NOT NULL,
-            total REAL NOT NULL,
-            id_usuario INTEGER NOT NULL,
-            FOREIGN KEY (id_usuario) REFERENCES usuario(id_usuario)
-        )
-    """)
-
-    # Tabla detalle de venta
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS detalle_venta (
-            id_detalle INTEGER PRIMARY KEY AUTOINCREMENT,
-            id_venta INTEGER NOT NULL,
-            id_producto INTEGER NOT NULL,
-            cantidad INTEGER NOT NULL,
-            subtotal REAL NOT NULL,
-            FOREIGN KEY (id_venta) REFERENCES venta(id_venta),
-            FOREIGN KEY (id_producto) REFERENCES producto(id_producto)
-        )
-    """)
-
-    # Tabla de alertas
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS alerta (
-            id_alerta INTEGER PRIMARY KEY AUTOINCREMENT,
-            id_producto INTEGER NOT NULL,
-            mensaje TEXT NOT NULL,
-            atendida INTEGER DEFAULT 0,
-            FOREIGN KEY (id_producto) REFERENCES producto(id_producto)
-        )
-    """)
-
-    # Usuario administrador por defecto
-    cursor.execute("""
-        INSERT OR IGNORE INTO usuario (id_usuario, nombre, usuario, password, rol)
-        VALUES (1, 'Administrador', 'admin', 'admin123', 'Administrador')
-    """)
-
-    conexion.commit()
-    conexion.close()
+    id_usuario: int
+    nombre: str
+    usuario: str
+    rol: str
 
 
 # ==============================
-# VALIDAR INICIO DE SESIÓN
+# APLICACIÓN PRINCIPAL
 # ==============================
 
-def validar_login(usuario, password):
-    conexion = conectar_bd()
-    cursor = conexion.cursor()
+class AplicacionInventario:
+    """
+    Clase principal del sistema.
 
-    cursor.execute("""
-        SELECT id_usuario, nombre, usuario, rol
-        FROM usuario
-        WHERE usuario = ? AND password = ?
-    """, (usuario, password))
+    Se encarga del login y de abrir la pantalla principal.
+    """
 
-    resultado = cursor.fetchone()
-    conexion.close()
-
-    return resultado
-
-
-# ==============================
-# VENTANA PRINCIPAL
-# ==============================
-
-class SistemaInventario:
     def __init__(self):
+        """
+        Inicializa la aplicación.
+        """
+
+        # Creamos las tablas si no existen.
+        crear_tablas()
+
+        # Creamos la ventana de login.
         self.root = tk.Tk()
-        self.root.title("Sistema de Inventario - Papelería")
-        self.root.geometry("900x550")
+        self.root.title("Dunder Mifflin - Sistema de Inventario")
+        self.root.geometry("500x430")
         self.root.resizable(False, False)
+        self.root.configure(bg="#ecf0f1")
 
-        self.usuario_actual = None
-
-        self.mostrar_login()
-
-    def limpiar_ventana(self):
-        for widget in self.root.winfo_children():
-            widget.destroy()
+        self.centrar_ventana()
+        self.crear_login()
 
     # ==============================
-    # LOGIN
+    # CENTRAR VENTANA
     # ==============================
 
-    def mostrar_login(self):
-        self.limpiar_ventana()
+    def centrar_ventana(self):
+        """
+        Centra la ventana de login en la pantalla.
+        """
 
-        frame = tk.Frame(self.root, padx=30, pady=30)
-        frame.pack(expand=True)
+        self.root.update_idletasks()
+
+        ancho = 500
+        alto = 430
+
+        x = (self.root.winfo_screenwidth() // 2) - (ancho // 2)
+        y = (self.root.winfo_screenheight() // 2) - (alto // 2)
+
+        self.root.geometry(f"{ancho}x{alto}+{x}+{y}")
+
+    # ==============================
+    # CREAR LOGIN
+    # ==============================
+
+    def crear_login(self):
+        """
+        Crea la pantalla de inicio de sesión.
+        """
+
+        frame_login = tk.Frame(
+            self.root,
+            bg="white",
+            padx=35,
+            pady=35
+        )
+        frame_login.pack(expand=True)
 
         titulo = tk.Label(
-            frame,
-            text="Sistema de Inventario",
-            font=("Arial", 22, "bold")
+            frame_login,
+            text="Dunder Mifflin",
+            font=("Segoe UI", 24, "bold"),
+            bg="white",
+            fg="#2c3e50"
         )
-        titulo.pack(pady=10)
+        titulo.pack(pady=(0, 5))
 
         subtitulo = tk.Label(
-            frame,
-            text="Papelería Dunder Mifflin",
-            font=("Arial", 14)
+            frame_login,
+            text="Sistema de Inventario",
+            font=("Segoe UI", 13),
+            bg="white",
+            fg="#7f8c8d"
         )
-        subtitulo.pack(pady=5)
+        subtitulo.pack(pady=(0, 25))
 
-        tk.Label(frame, text="Usuario:", font=("Arial", 12)).pack(pady=5)
-        self.entry_usuario = tk.Entry(frame, font=("Arial", 12), width=30)
-        self.entry_usuario.pack()
+        # Campo usuario.
+        lbl_usuario = tk.Label(
+            frame_login,
+            text="Usuario:",
+            font=("Segoe UI", 11, "bold"),
+            bg="white",
+            fg="#2c3e50"
+        )
+        lbl_usuario.pack(anchor="w")
 
-        tk.Label(frame, text="Contraseña:", font=("Arial", 12)).pack(pady=5)
-        self.entry_password = tk.Entry(frame, font=("Arial", 12), width=30, show="*")
-        self.entry_password.pack()
+        self.entry_usuario = tk.Entry(
+            frame_login,
+            font=("Segoe UI", 11),
+            width=30,
+            relief="solid",
+            bd=1
+        )
+        self.entry_usuario.pack(pady=(5, 15), ipady=5)
 
+        # Campo contraseña.
+        lbl_password = tk.Label(
+            frame_login,
+            text="Contraseña:",
+            font=("Segoe UI", 11, "bold"),
+            bg="white",
+            fg="#2c3e50"
+        )
+        lbl_password.pack(anchor="w")
+
+        self.entry_password = tk.Entry(
+            frame_login,
+            font=("Segoe UI", 11),
+            width=30,
+            show="*",
+            relief="solid",
+            bd=1
+        )
+        self.entry_password.pack(pady=(5, 20), ipady=5)
+
+        # Botón iniciar sesión.
         btn_login = tk.Button(
-            frame,
+            frame_login,
             text="Iniciar sesión",
-            font=("Arial", 12),
-            width=20,
+            font=("Segoe UI", 11, "bold"),
+            bg="#e67e22",
+            fg="white",
+            activebackground="#d35400",
+            activeforeground="white",
+            relief="flat",
+            cursor="hand2",
+            width=24,
+            height=2,
             command=self.iniciar_sesion
         )
-        btn_login.pack(pady=20)
+        btn_login.pack(pady=10)
 
+        # Usuario de prueba.
         ayuda = tk.Label(
-            frame,
-            text="Usuario de prueba: admin | Contraseña: admin123",
-            font=("Arial", 10)
+            frame_login,
+            text="Usuario: admin   |   Contraseña: admin123",
+            font=("Segoe UI", 9),
+            bg="white",
+            fg="#7f8c8d"
         )
-        ayuda.pack(pady=5)
+        ayuda.pack(pady=(15, 0))
+
+        # Permite iniciar sesión con Enter.
+        self.root.bind("<Return>", lambda event: self.iniciar_sesion())
+
+    # ==============================
+    # VALIDAR USUARIO
+    # ==============================
+
+    def validar_usuario(self, usuario, password):
+        """
+        Valida usuario y contraseña en la base de datos.
+
+        Retorna:
+        UsuarioSesion si las credenciales son correctas.
+        None si son incorrectas.
+        """
+
+        try:
+            conexion = conectar_bd()
+            cursor = conexion.cursor()
+
+            cursor.execute("""
+                SELECT
+                    id_usuario,
+                    nombre,
+                    usuario,
+                    rol
+                FROM usuario
+                WHERE usuario = ? AND password = ?
+            """, (
+                usuario,
+                password
+            ))
+
+            resultado = cursor.fetchone()
+            conexion.close()
+
+            if resultado:
+                return UsuarioSesion(
+                    id_usuario=resultado[0],
+                    nombre=resultado[1],
+                    usuario=resultado[2],
+                    rol=resultado[3]
+                )
+
+            return None
+
+        except Exception as error:
+            messagebox.showerror(
+                "Error",
+                f"No se pudo validar el usuario.\n\nDetalle: {error}"
+            )
+            return None
+
+    # ==============================
+    # INICIAR SESIÓN
+    # ==============================
 
     def iniciar_sesion(self):
-        usuario = self.entry_usuario.get()
-        password = self.entry_password.get()
+        """
+        Valida el login y abre el layout principal.
+        """
+
+        usuario = self.entry_usuario.get().strip()
+        password = self.entry_password.get().strip()
 
         if usuario == "" or password == "":
-            messagebox.showwarning("Campos vacíos", "Ingresa usuario y contraseña.")
+            messagebox.showwarning(
+                "Campos vacíos",
+                "Ingresa usuario y contraseña."
+            )
             return
 
-        resultado = validar_login(usuario, password)
+        usuario_sesion = self.validar_usuario(usuario, password)
 
-        if resultado:
-            self.usuario_actual = resultado
-            messagebox.showinfo("Bienvenido", f"Bienvenido {resultado[1]}")
-            self.mostrar_menu()
-        else:
-            messagebox.showerror("Error", "Usuario o contraseña incorrectos.")
-
-    # ==============================
-    # MENÚ PRINCIPAL
-    # ==============================
-
-    def mostrar_menu(self):
-        self.limpiar_ventana()
-
-        nombre = self.usuario_actual[1]
-        rol = self.usuario_actual[3]
-
-        titulo = tk.Label(
-            self.root,
-            text="Menú Principal",
-            font=("Arial", 24, "bold")
-        )
-        titulo.pack(pady=20)
-
-        usuario_label = tk.Label(
-            self.root,
-            text=f"Usuario: {nombre} | Rol: {rol}",
-            font=("Arial", 12)
-        )
-        usuario_label.pack(pady=5)
-
-        frame_botones = tk.Frame(self.root)
-        frame_botones.pack(pady=30)
-
-        botones = [
-            ("Administrar productos", self.ventana_productos),
-            ("Gestionar categorías", self.ventana_categorias),
-            ("Gestionar proveedores", self.ventana_proveedores),
-            ("Inventario", self.ventana_inventario),
-            ("Registrar venta", self.ventana_ventas),
-            ("Alertas de stock bajo", self.ventana_alertas),
-            ("Reportes", self.ventana_reportes),
-            ("Administrar usuarios", self.ventana_usuarios),
-        ]
-
-        fila = 0
-        columna = 0
-
-        for texto, comando in botones:
-            btn = tk.Button(
-                frame_botones,
-                text=texto,
-                width=25,
-                height=2,
-                font=("Arial", 11),
-                command=comando
+        if usuario_sesion is None:
+            messagebox.showerror(
+                "Acceso denegado",
+                "Usuario o contraseña incorrectos."
             )
-            btn.grid(row=fila, column=columna, padx=10, pady=10)
+            return
 
-            columna += 1
-            if columna == 2:
-                columna = 0
-                fila += 1
+        # Ocultamos el login.
+        self.root.withdraw()
 
-        btn_salir = tk.Button(
-            self.root,
-            text="Cerrar sesión",
-            width=20,
-            font=("Arial", 11),
-            command=self.mostrar_login
+        # Abrimos la pantalla principal basada en Figma.
+        ventana_principal = LayoutPrincipal(
+            parent=self.root,
+            usuario=usuario_sesion
         )
-        btn_salir.pack(pady=10)
+
+        ventana_principal.focus_set()
+
+        # Si cierran la pantalla principal, se cierra todo el programa.
+        ventana_principal.protocol("WM_DELETE_WINDOW", self.cerrar_aplicacion)
 
     # ==============================
-    # VENTANAS TEMPORALES
+    # CERRAR APLICACIÓN
     # ==============================
 
-    def mostrar_ventana_temporal(self, titulo, descripcion):
-        ventana = tk.Toplevel(self.root)
-        ventana.title(titulo)
-        ventana.geometry("500x300")
-        ventana.resizable(False, False)
+    def cerrar_aplicacion(self):
+        """
+        Cierra completamente la aplicación.
+        """
 
-        label_titulo = tk.Label(
-            ventana,
-            text=titulo,
-            font=("Arial", 18, "bold")
-        )
-        label_titulo.pack(pady=20)
-
-        label_descripcion = tk.Label(
-            ventana,
-            text=descripcion,
-            font=("Arial", 12),
-            wraplength=420,
-            justify="center"
-        )
-        label_descripcion.pack(pady=20)
-
-        btn_cerrar = tk.Button(
-            ventana,
-            text="Cerrar",
-            width=15,
-            command=ventana.destroy
-        )
-        btn_cerrar.pack(pady=20)
-
-    def ventana_productos(self):
-        self.mostrar_ventana_temporal(
-            "Administrar productos",
-            "Aquí se registrarán, modificarán, eliminarán y consultarán los productos de la papelería."
+        confirmar = messagebox.askyesno(
+            "Salir",
+            "¿Seguro que deseas salir del sistema?"
         )
 
-    def ventana_categorias(self):
-        self.mostrar_ventana_temporal(
-            "Gestionar categorías",
-            "Aquí se administrarán las categorías de productos, como útiles escolares, papelería, oficina, etc."
-        )
+        if confirmar:
+            self.root.destroy()
 
-    def ventana_proveedores(self):
-        self.mostrar_ventana_temporal(
-            "Gestionar proveedores",
-            "Aquí se registrarán los proveedores que suministran productos a la papelería."
-        )
-
-    def ventana_inventario(self):
-        self.mostrar_ventana_temporal(
-            "Inventario",
-            "Aquí se controlarán las entradas, existencias y ubicación de los productos."
-        )
-
-    def ventana_ventas(self):
-        self.mostrar_ventana_temporal(
-            "Registrar venta",
-            "Aquí el vendedor podrá seleccionar productos, calcular el total y registrar la venta."
-        )
-
-    def ventana_alertas(self):
-        self.mostrar_ventana_temporal(
-            "Alertas de stock bajo",
-            "Aquí se mostrarán los productos que tienen existencia baja o llegaron al stock mínimo."
-        )
-
-    def ventana_reportes(self):
-        self.mostrar_ventana_temporal(
-            "Reportes",
-            "Aquí se generarán reportes de inventario, ventas, movimientos y productos con bajo stock."
-        )
-
-    def ventana_usuarios(self):
-        self.mostrar_ventana_temporal(
-            "Administrar usuarios",
-            "Aquí el administrador podrá registrar, modificar o desactivar usuarios del sistema."
-        )
+    # ==============================
+    # EJECUTAR
+    # ==============================
 
     def ejecutar(self):
+        """
+        Mantiene abierta la aplicación.
+        """
+
         self.root.mainloop()
 
 
@@ -378,6 +326,5 @@ class SistemaInventario:
 # ==============================
 
 if __name__ == "__main__":
-    crear_tablas()
-    app = SistemaInventario()
+    app = AplicacionInventario()
     app.ejecutar()

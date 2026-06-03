@@ -1,26 +1,22 @@
 # ==============================
-# vista_PRODUCTOS
+# VISTA DE PRUEBA CRUD PRODUCTOS
 # ==============================
 
 """
-Esta pantalla permite administrar productos.
+Esta vista sirve para probar de forma más completa el CRUD de productos.
 
-Funciones principales:
-- Registrar producto.
-- Consultar productos.
-- Buscar por código.
+Permite:
+- Crear producto.
+- Leer/listar productos.
+- Buscar producto por código.
+- Seleccionar producto.
 - Actualizar producto.
 - Eliminar producto.
-- Mostrar productos en una tabla.
+- Actualizar cantidad y ubicación de inventario.
 
-Esta vista se conecta con:
-controllers/producto_controller.py
-
-Diseño basado en el prototipo de Figma:
-- Sidebar izquierdo fijo
-- Topbar con acciones
-- Card blanca para el contenido
-- Colores corporativos Dunder Mifflin
+Esta vista es independiente del layout principal.
+Se puede ejecutar con:
+python -m views.productos_view
 """
 
 import os
@@ -28,419 +24,121 @@ import sys
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-# Manejo de rutas para ejecución directa
 RUTA_PROYECTO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if RUTA_PROYECTO not in sys.path:
-    sys.path.append(RUTA_PROYECTO)
+    sys.path.insert(0, RUTA_PROYECTO)
 
 from controllers.producto_controller import ProductoController
 
 
-# ==============================
-# CLASE PRINCIPAL DE LA VISTA
-# ==============================
-
-class ProductosView(tk.Toplevel):
+class VentanaProductos(tk.Toplevel):
     """
-    Esta clase representa la pantalla de administración de productos.
-
-    Hereda de tk.Toplevel para abrirse como ventana independiente.
-    Incluye diseño de sidebar y topbar como en el prototipo de Figma.
+    Ventana para probar el CRUD completo de productos.
     """
 
-    def __init__(self, parent, usuario=None):
-        """
-        Constructor de la pantalla.
-
-        Parámetros:
-        parent: ventana padre.
-        usuario: objeto Usuario (opcional, para verificar rol).
-        """
-
+    def __init__(self, parent=None):
         super().__init__(parent)
 
-        # Configuración de la ventana.
-        self.title("Dunder Mifflin - Administrar Productos")
-        self.geometry("1100x700")
-        self.configure(bg="#e8ecef")
-        self.resizable(True, True)
+        self.title("Prueba CRUD - Productos")
+        self.geometry("1120x680")
+        self.minsize(1000, 620)
+        self.configure(bg="#ecf0f1")
 
-        # Centramos la ventana.
-        self._centrar_ventana()
-
-        # Guardamos el usuario (para control de rol si es necesario).
-        self.usuario = usuario
-
-        # Controlador de productos.
         self.producto_controller = ProductoController()
-
-        # Variables para el producto seleccionado.
         self.id_producto_seleccionado = None
         self.id_categoria_actual = None
         self.id_proveedor_actual = None
 
-        # Construimos la interfaz completa.
-        self._construir_interfaz()
-
-        # Cargamos los productos al iniciar.
+        self.crear_interfaz()
         self.cargar_productos()
 
     # ==============================
-    # MÉTODOS PRIVADOS (DISEÑO)
+    # INTERFAZ
     # ==============================
 
-    def _centrar_ventana(self):
-        """Centra la ventana en la pantalla."""
-        self.update_idletasks()
-        ancho = self.winfo_width()
-        alto = self.winfo_height()
-        x = (self.winfo_screenwidth() // 2) - (ancho // 2)
-        y = (self.winfo_screenheight() // 2) - (alto // 2)
-        self.geometry(f"+{x}+{y}")
-
-    def _construir_interfaz(self):
+    def crear_interfaz(self):
         """
-        Construye toda la interfaz siguiendo el diseño del prototipo.
-        Estructura: Sidebar izquierdo + Main (Topbar + Content)
+        Crea la interfaz visual de la prueba CRUD.
         """
 
-        # ==============================
-        # CONTENEDOR PRINCIPAL (FLEX HORIZONTAL)
-        # ==============================
+        contenedor = tk.Frame(self, bg="#ecf0f1")
+        contenedor.pack(fill="both", expand=True, padx=25, pady=25)
 
-        # Frame principal con display flex horizontal.
-        self.frame_principal = tk.Frame(self, bg="#e8ecef")
-        self.frame_principal.pack(fill=tk.BOTH, expand=True)
-
-        # ==============================
-        # SIDEBAR IZQUIERDA
-        # ==============================
-
-        self._crear_sidebar()
-
-        # ==============================
-        # ÁREA PRINCIPAL (TOPBAR + CONTENT)
-        # ==============================
-
-        frame_main = tk.Frame(self.frame_principal, bg="#e8ecef")
-        frame_main.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        self._crear_topbar(frame_main)
-        self._crear_content(frame_main)
-
-    def _crear_sidebar(self):
-        """
-        Crea la barra lateral izquierda con:
-        - Logo / Brand
-        - Rol del usuario
-        - Navegación (opciones del menú)
-        """
-
-        frame_sidebar = tk.Frame(
-            self.frame_principal,
-            bg="#3a4f63",
-            width=240
-        )
-        frame_sidebar.pack(side=tk.LEFT, fill=tk.Y)
-        frame_sidebar.pack_propagate(False)  # Mantiene el ancho fijo.
-
-        # ===== Brand / Logo =====
-        lbl_brand = tk.Label(
-            frame_sidebar,
-            text="Dunder Mifflin",
-            font=("Segoe UI", 20, "bold"),
-            bg="#3a4f63",
-            fg="white"
-        )
-        lbl_brand.pack(pady=(40, 10))
-
-        # ===== Rol del usuario =====
-        rol_texto = self.usuario.rol if self.usuario else "Administrador"
-        lbl_rol = tk.Label(
-            frame_sidebar,
-            text=f"Rol: {rol_texto}",
-            font=("Segoe UI", 11),
-            bg="#3a4f63",
-            fg="#b0c0d0"
-        )
-        lbl_rol.pack(pady=(0, 30))
-
-        # ===== Navegación =====
-        nav_items = [
-            ("Nueva Venta", self._ir_a_ventas),
-            ("Reportes", self._ir_a_reportes),
-            ("Cerrar Sesión", self._cerrar_sesion),
-        ]
-
-        for texto, comando in nav_items:
-            btn_nav = tk.Button(
-                frame_sidebar,
-                text=texto,
-                font=("Segoe UI", 11),
-                bg="#3a4f63",
-                fg="#b0c0d0",
-                activebackground="#2c3e50",
-                activeforeground="white",
-                relief=tk.FLAT,
-                anchor="w",
-                padx=20,
-                command=comando
-            )
-            btn_nav.pack(fill=tk.X, pady=2)
-
-    def _crear_topbar(self, parent):
-        """
-        Crea la barra superior con botones de acciones rápidas.
-        """
-
-        frame_topbar = tk.Frame(parent, bg="white", height=60)
-        frame_topbar.pack(fill=tk.X, side=tk.TOP)
-        frame_topbar.pack_propagate(False)
-
-        # Contenedor para botones (alineados a la derecha).
-        frame_acciones = tk.Frame(frame_topbar, bg="white")
-        frame_acciones.pack(side=tk.RIGHT, padx=20, pady=10)
-
-        # Botón: Gestión Productos (actual, en negrita)
-        btn_productos = tk.Button(
-            frame_acciones,
-            text="Gestión Productos",
-            font=("Segoe UI", 10, "bold"),
-            bg="white",
+        titulo = tk.Label(
+            contenedor,
+            text="Prueba CRUD de Productos",
+            bg="#ecf0f1",
             fg="#2c3e50",
-            activebackground="#e8ecef",
-            relief=tk.FLAT,
-            cursor="hand2"
+            font=("Segoe UI", 24, "bold")
         )
-        btn_productos.pack(side=tk.LEFT, padx=5)
+        titulo.pack(anchor="w", pady=(0, 15))
 
-        # Botón: Soporte
-        btn_soporte = tk.Button(
-            frame_acciones,
-            text="Soporte",
-            font=("Segoe UI", 10),
-            bg="white",
-            fg="#2c3e50",
-            activebackground="#e8ecef",
-            relief=tk.FLAT,
-            cursor="hand2",
-            command=self._ir_a_soporte
-        )
-        btn_soporte.pack(side=tk.LEFT, padx=5)
+        card = tk.Frame(contenedor, bg="white", padx=20, pady=20)
+        card.pack(fill="both", expand=True)
 
-    def _crear_content(self, parent):
-        """
-        Crea el área de contenido principal (card blanca con formulario y tabla).
-        """
-
-        frame_content = tk.Frame(parent, bg="#e8ecef")
-        frame_content.pack(fill=tk.BOTH, expand=True, padx=30, pady=30)
-
-        # ===== CARD BLANCA =====
-        card = tk.Frame(
-            frame_content,
-            bg="white",
-            relief=tk.RAISED,
-            bd=1
-        )
-        card.pack(fill=tk.BOTH, expand=True)
-
-        # ===== TÍTULO DE LA CARD =====
-        lbl_titulo = tk.Label(
+        # Formulario
+        frame_formulario = tk.LabelFrame(
             card,
-            text="Administrar Catálogo",
-            font=("Segoe UI", 18, "bold"),
+            text="Datos del producto",
             bg="white",
-            fg="#2c3e50"
-        )
-        lbl_titulo.pack(pady=(20, 10), padx=20, anchor="w")
-
-        # ===== CONTENIDO DE LA CARD =====
-        frame_contenido_card = tk.Frame(card, bg="white")
-        frame_contenido_card.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
-
-        # --- Formulario ---
-        self._crear_formulario(frame_contenido_card)
-
-        # --- Botones de acción ---
-        self._crear_botones_accion(frame_contenido_card)
-
-        # --- Tabla de productos ---
-        self._crear_tabla(frame_contenido_card)
-
-    def _crear_formulario(self, parent):
-        """
-        Crea el formulario de productos (campos).
-        """
-
-        # Frame para campos en grid (2 filas x 4 columnas).
-        frame_campos = tk.Frame(parent, bg="white")
-        frame_campos.pack(fill=tk.X, pady=10)
-
-        # Fila 0
-        # Nombre
-        tk.Label(
-            frame_campos, text="Nombre:", bg="white", font=("Segoe UI", 10)
-        ).grid(row=0, column=0, sticky="w", padx=5, pady=5)
-        self.entry_nombre = tk.Entry(frame_campos, width=25, font=("Segoe UI", 10))
-        self.entry_nombre.grid(row=0, column=1, padx=5, pady=5)
-
-        # Código
-        tk.Label(
-            frame_campos, text="Código:", bg="white", font=("Segoe UI", 10)
-        ).grid(row=0, column=2, sticky="w", padx=5, pady=5)
-        self.entry_codigo = tk.Entry(frame_campos, width=15, font=("Segoe UI", 10))
-        self.entry_codigo.grid(row=0, column=3, padx=5, pady=5)
-
-        # Precio
-        tk.Label(
-            frame_campos, text="Precio:", bg="white", font=("Segoe UI", 10)
-        ).grid(row=0, column=4, sticky="w", padx=5, pady=5)
-        self.entry_precio = tk.Entry(frame_campos, width=12, font=("Segoe UI", 10))
-        self.entry_precio.grid(row=0, column=5, padx=5, pady=5)
-
-        # Fila 1
-        # Stock mínimo
-        tk.Label(
-            frame_campos, text="Stock mínimo:", bg="white", font=("Segoe UI", 10)
-        ).grid(row=1, column=0, sticky="w", padx=5, pady=5)
-        self.entry_stock_minimo = tk.Entry(frame_campos, width=15, font=("Segoe UI", 10))
-        self.entry_stock_minimo.grid(row=1, column=1, padx=5, pady=5)
-
-        # Cantidad
-        tk.Label(
-            frame_campos, text="Cantidad:", bg="white", font=("Segoe UI", 10)
-        ).grid(row=1, column=2, sticky="w", padx=5, pady=5)
-        self.entry_cantidad = tk.Entry(frame_campos, width=15, font=("Segoe UI", 10))
-        self.entry_cantidad.grid(row=1, column=3, padx=5, pady=5)
-
-        # Ubicación
-        tk.Label(
-            frame_campos, text="Ubicación:", bg="white", font=("Segoe UI", 10)
-        ).grid(row=1, column=4, sticky="w", padx=5, pady=5)
-        self.entry_ubicacion = tk.Entry(frame_campos, width=15, font=("Segoe UI", 10))
-        self.entry_ubicacion.grid(row=1, column=5, padx=5, pady=5)
-
-    def _crear_botones_accion(self, parent):
-        """
-        Crea los botones de acción (Agregar, Actualizar, Eliminar, Limpiar)
-        y la sección de búsqueda.
-        """
-
-        frame_botones = tk.Frame(parent, bg="white")
-        frame_botones.pack(fill=tk.X, pady=15)
-
-        # Fila 0: Botones CRUD
-        btn_agregar = tk.Button(
-            frame_botones,
-            text="Agregar",
-            font=("Segoe UI", 10, "bold"),
-            bg="#e67e22",
-            fg="white",
-            activebackground="#d35400",
-            cursor="hand2",
-            relief=tk.FLAT,
-            padx=15,
-            command=self.agregar_producto
-        )
-        btn_agregar.grid(row=0, column=0, padx=5, pady=5)
-
-        btn_actualizar = tk.Button(
-            frame_botones,
-            text="Actualizar",
-            font=("Segoe UI", 10, "bold"),
-            bg="#e67e22",
-            fg="white",
-            activebackground="#d35400",
-            cursor="hand2",
-            relief=tk.FLAT,
-            padx=15,
-            command=self.actualizar_producto
-        )
-        btn_actualizar.grid(row=0, column=1, padx=5, pady=5)
-
-        btn_eliminar = tk.Button(
-            frame_botones,
-            text="Eliminar",
-            font=("Segoe UI", 10, "bold"),
-            bg="#e67e22",
-            fg="white",
-            activebackground="#d35400",
-            cursor="hand2",
-            relief=tk.FLAT,
-            padx=15,
-            command=self.eliminar_producto
-        )
-        btn_eliminar.grid(row=0, column=2, padx=5, pady=5)
-
-        btn_limpiar = tk.Button(
-            frame_botones,
-            text="Limpiar",
-            font=("Segoe UI", 10, "bold"),
-            bg="#7f8c8d",
-            fg="white",
-            activebackground="#6c7a7d",
-            cursor="hand2",
-            relief=tk.FLAT,
-            padx=15,
-            command=self.limpiar_formulario
-        )
-        btn_limpiar.grid(row=0, column=3, padx=5, pady=5)
-
-        # Fila 1: Búsqueda
-        tk.Label(
-            frame_botones, text="Buscar código:", bg="white", font=("Segoe UI", 10)
-        ).grid(row=1, column=0, padx=5, pady=5, sticky="e")
-
-        self.entry_buscar = tk.Entry(frame_botones, width=20, font=("Segoe UI", 10))
-        self.entry_buscar.grid(row=1, column=1, padx=5, pady=5)
-
-        btn_buscar = tk.Button(
-            frame_botones,
-            text="Buscar",
-            font=("Segoe UI", 10),
-            bg="#e67e22",
-            fg="white",
-            activebackground="#d35400",
-            cursor="hand2",
-            relief=tk.FLAT,
-            padx=10,
-            command=self.buscar_producto
-        )
-        btn_buscar.grid(row=1, column=2, padx=5, pady=5)
-
-        btn_mostrar_todos = tk.Button(
-            frame_botones,
-            text="Mostrar todos",
-            font=("Segoe UI", 10),
-            bg="#7f8c8d",
-            fg="white",
-            activebackground="#6c7a7d",
-            cursor="hand2",
-            relief=tk.FLAT,
-            command=self.cargar_productos
-        )
-        btn_mostrar_todos.grid(row=1, column=3, padx=5, pady=5)
-
-    def _crear_tabla(self, parent):
-        """
-        Crea el Treeview para listar productos.
-        """
-
-        # Frame contenedor con borde.
-        frame_tabla = tk.LabelFrame(
-            parent,
-            text="Lista de productos",
+            fg="#2c3e50",
             font=("Segoe UI", 11, "bold"),
-            bg="white",
-            fg="#2c3e50"
+            padx=15,
+            pady=15
         )
-        frame_tabla.pack(fill=tk.BOTH, expand=True, pady=10)
+        frame_formulario.pack(fill="x", pady=(0, 15))
+
+        self.entry_codigo = self.crear_campo(frame_formulario, "Código:", 0, 0)
+        self.entry_nombre = self.crear_campo(frame_formulario, "Nombre:", 0, 2)
+        self.entry_precio = self.crear_campo(frame_formulario, "Precio:", 0, 4)
+
+        self.entry_stock_minimo = self.crear_campo(frame_formulario, "Stock mínimo:", 1, 0)
+        self.entry_cantidad = self.crear_campo(frame_formulario, "Cantidad:", 1, 2)
+        self.entry_ubicacion = self.crear_campo(frame_formulario, "Ubicación:", 1, 4)
+
+        # Botones CRUD
+        frame_botones = tk.Frame(card, bg="white")
+        frame_botones.pack(fill="x", pady=(0, 15))
+
+        self.crear_boton(frame_botones, "Agregar", "#e67e22", self.agregar_producto).pack(side="left", padx=(0, 10))
+        self.crear_boton(frame_botones, "Actualizar", "#e67e22", self.actualizar_producto).pack(side="left", padx=(0, 10))
+        self.crear_boton(frame_botones, "Eliminar", "#e74c3c", self.eliminar_producto).pack(side="left", padx=(0, 10))
+        self.crear_boton(frame_botones, "Limpiar", "#95a5a6", self.limpiar_formulario).pack(side="left", padx=(0, 10))
+
+        # Búsqueda
+        frame_busqueda = tk.Frame(card, bg="white")
+        frame_busqueda.pack(fill="x", pady=(0, 15))
+
+        tk.Label(
+            frame_busqueda,
+            text="Buscar por código:",
+            bg="white",
+            fg="#2c3e50",
+            font=("Segoe UI", 10, "bold")
+        ).pack(side="left", padx=(0, 8))
+
+        self.entry_buscar = tk.Entry(frame_busqueda, font=("Segoe UI", 10), width=25)
+        self.entry_buscar.pack(side="left", padx=(0, 10), ipady=4)
+
+        self.crear_boton(frame_busqueda, "Buscar", "#e67e22", self.buscar_producto).pack(side="left", padx=(0, 10))
+        self.crear_boton(frame_busqueda, "Mostrar todos", "#34495e", self.cargar_productos).pack(side="left", padx=(0, 10))
+
+        # Tabla
+        frame_tabla = tk.LabelFrame(
+            card,
+            text="Productos registrados",
+            bg="white",
+            fg="#2c3e50",
+            font=("Segoe UI", 11, "bold"),
+            padx=10,
+            pady=10
+        )
+        frame_tabla.pack(fill="both", expand=True)
 
         columnas = (
             "id",
-            "nombre",
             "codigo",
+            "nombre",
             "precio",
             "stock_minimo",
             "cantidad",
@@ -454,114 +152,161 @@ class ProductosView(tk.Toplevel):
             height=12
         )
 
-        # Configurar encabezados.
-        self.tabla_productos.heading("id", text="ID")
-        self.tabla_productos.heading("nombre", text="Nombre")
-        self.tabla_productos.heading("codigo", text="Código")
-        self.tabla_productos.heading("precio", text="Precio")
-        self.tabla_productos.heading("stock_minimo", text="Stock mín.")
-        self.tabla_productos.heading("cantidad", text="Cantidad")
-        self.tabla_productos.heading("ubicacion", text="Ubicación")
+        encabezados = {
+            "id": "ID",
+            "codigo": "Código",
+            "nombre": "Nombre",
+            "precio": "Precio",
+            "stock_minimo": "Stock mín.",
+            "cantidad": "Cantidad",
+            "ubicacion": "Ubicación"
+        }
 
-        # Configurar ancho de columnas.
-        self.tabla_productos.column("id", width=50, anchor="center")
-        self.tabla_productos.column("nombre", width=200)
-        self.tabla_productos.column("codigo", width=100, anchor="center")
-        self.tabla_productos.column("precio", width=90, anchor="center")
-        self.tabla_productos.column("stock_minimo", width=80, anchor="center")
-        self.tabla_productos.column("cantidad", width=90, anchor="center")
-        self.tabla_productos.column("ubicacion", width=120)
+        for columna, texto in encabezados.items():
+            self.tabla_productos.heading(columna, text=texto)
 
-        # Scrollbar.
+        self.tabla_productos.column("id", width=60, anchor="center")
+        self.tabla_productos.column("codigo", width=120, anchor="center")
+        self.tabla_productos.column("nombre", width=260)
+        self.tabla_productos.column("precio", width=100, anchor="center")
+        self.tabla_productos.column("stock_minimo", width=100, anchor="center")
+        self.tabla_productos.column("cantidad", width=100, anchor="center")
+        self.tabla_productos.column("ubicacion", width=180)
+
+        self.tabla_productos.pack(side="left", fill="both", expand=True)
+
         scrollbar = ttk.Scrollbar(
             frame_tabla,
             orient="vertical",
             command=self.tabla_productos.yview
         )
-        self.tabla_productos.configure(yscrollcommand=scrollbar.set)
-
-        self.tabla_productos.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
-        # Evento al seleccionar una fila.
+        self.tabla_productos.configure(yscrollcommand=scrollbar.set)
         self.tabla_productos.bind("<<TreeviewSelect>>", self.seleccionar_producto)
 
+    def crear_campo(self, parent, texto, fila, columna):
+        """
+        Crea una etiqueta y un campo de texto.
+        """
+
+        tk.Label(
+            parent,
+            text=texto,
+            bg="white",
+            fg="#2c3e50",
+            font=("Segoe UI", 10, "bold")
+        ).grid(row=fila, column=columna, sticky="w", padx=(0, 8), pady=8)
+
+        entry = tk.Entry(parent, font=("Segoe UI", 10), width=24)
+        entry.grid(row=fila, column=columna + 1, sticky="w", padx=(0, 20), pady=8, ipady=4)
+
+        return entry
+
+    def crear_boton(self, parent, texto, color, comando):
+        """
+        Crea un botón estándar.
+        """
+
+        return tk.Button(
+            parent,
+            text=texto,
+            bg=color,
+            fg="white",
+            font=("Segoe UI", 10, "bold"),
+            relief="flat",
+            cursor="hand2",
+            width=14,
+            height=2,
+            command=comando
+        )
+
     # ==============================
-    # MÉTODOS DE NAVEGACIÓN
+    # FUNCIONES CRUD
     # ==============================
 
-    def _ir_a_ventas(self):
-        """Abre la ventana de registro de ventas."""
-        # TODO: Implementar cuando exista ventana_ventas.py
-        messagebox.showinfo("En desarrollo", "Módulo de ventas en construcción")
+    def obtener_datos(self):
+        """
+        Obtiene datos del formulario.
+        """
 
-    def _ir_a_reportes(self):
-        """Abre la ventana de reportes."""
-        # TODO: Implementar cuando exista ventana_reportes.py
-        messagebox.showinfo("En desarrollo", "Módulo de reportes en construcción")
-
-    def _ir_a_soporte(self):
-        """Abre la ventana de soporte técnico."""
-        messagebox.showinfo("Soporte", "Contacta al administrador del sistema")
-
-    def _cerrar_sesion(self):
-        """Cierra la sesión y vuelve al login."""
-        from views.login_view import LoginView
-        self.destroy()
-        login = LoginView(self.master)
-        login.focus_set()
-
-    # ==============================
-    # MÉTODOS DE NEGOCIO (CRUD)
-    # ==============================
+        return {
+            "codigo": self.entry_codigo.get().strip(),
+            "nombre": self.entry_nombre.get().strip(),
+            "precio": self.entry_precio.get().strip(),
+            "stock_minimo": self.entry_stock_minimo.get().strip(),
+            "cantidad": self.entry_cantidad.get().strip(),
+            "ubicacion": self.entry_ubicacion.get().strip()
+        }
 
     def cargar_productos(self):
-        """Carga todos los productos en la tabla."""
-        # Limpiamos la tabla.
+        """
+        Lista todos los productos en la tabla.
+        """
+
         for fila in self.tabla_productos.get_children():
             self.tabla_productos.delete(fila)
 
         productos = self.producto_controller.listar_productos()
 
         for producto in productos:
+            # Estructura esperada:
+            # 0 id_producto
+            # 1 nombre
+            # 2 codigo
+            # 3 precio
+            # 4 stock_minimo
+            # 5 id_categoria
+            # 6 id_proveedor
+            # 7 cantidad_actual
+            # 8 ubicacion
+
+            cantidad = producto[7] if len(producto) > 7 else 0
+            ubicacion = producto[8] if len(producto) > 8 else ""
+
             self.tabla_productos.insert(
                 "",
                 "end",
                 values=(
-                    producto[0],  # id
-                    producto[1],  # nombre
-                    producto[2],  # codigo
-                    producto[3],  # precio
-                    producto[4],  # stock_minimo
-                    producto[7],  # cantidad_actual
-                    producto[8]   # ubicacion
+                    producto[0],
+                    producto[2],
+                    producto[1],
+                    producto[3],
+                    producto[4],
+                    cantidad,
+                    ubicacion
                 )
             )
 
         self.entry_buscar.delete(0, tk.END)
 
-    def obtener_datos_formulario(self):
-        """Obtiene los datos capturados en el formulario."""
-        nombre = self.entry_nombre.get().strip()
-        codigo = self.entry_codigo.get().strip()
-        precio = self.entry_precio.get().strip()
-        stock_minimo = self.entry_stock_minimo.get().strip()
-        cantidad = self.entry_cantidad.get().strip()
-        ubicacion = self.entry_ubicacion.get().strip()
-
-        return nombre, codigo, precio, stock_minimo, cantidad, ubicacion
-
     def agregar_producto(self):
-        """Registra un nuevo producto."""
-        nombre, codigo, precio, stock_minimo, cantidad, ubicacion = self.obtener_datos_formulario()
+        """
+        Crea un producto.
+        """
+
+        datos = self.obtener_datos()
+
+        if datos["codigo"] == "" or datos["nombre"] == "" or datos["precio"] == "":
+            messagebox.showwarning(
+                "Campos requeridos",
+                "Código, nombre y precio son obligatorios."
+            )
+            return
+
+        if datos["stock_minimo"] == "":
+            datos["stock_minimo"] = 0
+
+        if datos["cantidad"] == "":
+            datos["cantidad"] = 0
 
         resultado, mensaje = self.producto_controller.registrar_producto(
-            nombre=nombre,
-            codigo=codigo,
-            precio=precio,
-            stock_minimo=stock_minimo,
-            cantidad_inicial=cantidad,
-            ubicacion=ubicacion
+            nombre=datos["nombre"],
+            codigo=datos["codigo"],
+            precio=datos["precio"],
+            stock_minimo=datos["stock_minimo"],
+            cantidad_inicial=datos["cantidad"],
+            ubicacion=datos["ubicacion"]
         )
 
         if resultado:
@@ -572,30 +317,29 @@ class ProductosView(tk.Toplevel):
             messagebox.showerror("Error", mensaje)
 
     def seleccionar_producto(self, event):
-        """Carga los datos del producto seleccionado en el formulario."""
+        """
+        Carga datos del producto seleccionado.
+        """
+
         seleccion = self.tabla_productos.selection()
 
         if not seleccion:
             return
 
         valores = self.tabla_productos.item(seleccion[0], "values")
-
         self.id_producto_seleccionado = valores[0]
 
-        # Buscar producto completo para obtener categoría y proveedor.
-        producto_completo = self.producto_controller.buscar_por_id(
-            self.id_producto_seleccionado
-        )
+        producto_completo = self.producto_controller.buscar_por_id(self.id_producto_seleccionado)
 
         if producto_completo:
             self.id_categoria_actual = producto_completo[5]
             self.id_proveedor_actual = producto_completo[6]
 
-        self.entry_nombre.delete(0, tk.END)
-        self.entry_nombre.insert(0, valores[1])
-
         self.entry_codigo.delete(0, tk.END)
-        self.entry_codigo.insert(0, valores[2])
+        self.entry_codigo.insert(0, valores[1])
+
+        self.entry_nombre.delete(0, tk.END)
+        self.entry_nombre.insert(0, valores[2])
 
         self.entry_precio.delete(0, tk.END)
         self.entry_precio.insert(0, valores[3])
@@ -610,20 +354,35 @@ class ProductosView(tk.Toplevel):
         self.entry_ubicacion.insert(0, valores[6])
 
     def actualizar_producto(self):
-        """Actualiza el producto seleccionado."""
+        """
+        Actualiza el producto seleccionado.
+        """
+
         if self.id_producto_seleccionado is None:
             messagebox.showwarning("Aviso", "Selecciona un producto de la tabla.")
             return
 
-        nombre, codigo, precio, stock_minimo, cantidad, ubicacion = self.obtener_datos_formulario()
+        datos = self.obtener_datos()
 
-        # Actualizar datos del producto.
+        if datos["codigo"] == "" or datos["nombre"] == "" or datos["precio"] == "":
+            messagebox.showwarning(
+                "Campos requeridos",
+                "Código, nombre y precio son obligatorios."
+            )
+            return
+
+        if datos["stock_minimo"] == "":
+            datos["stock_minimo"] = 0
+
+        if datos["cantidad"] == "":
+            datos["cantidad"] = 0
+
         resultado, mensaje = self.producto_controller.actualizar_producto(
             id_producto=self.id_producto_seleccionado,
-            nombre=nombre,
-            codigo=codigo,
-            precio=precio,
-            stock_minimo=stock_minimo,
+            nombre=datos["nombre"],
+            codigo=datos["codigo"],
+            precio=datos["precio"],
+            stock_minimo=datos["stock_minimo"],
             id_categoria=self.id_categoria_actual,
             id_proveedor=self.id_proveedor_actual
         )
@@ -632,11 +391,10 @@ class ProductosView(tk.Toplevel):
             messagebox.showerror("Error", mensaje)
             return
 
-        # Actualizar inventario.
         resultado_inv, mensaje_inv = self.producto_controller.actualizar_inventario(
             id_producto=self.id_producto_seleccionado,
-            nueva_cantidad=cantidad,
-            nueva_ubicacion=ubicacion
+            nueva_cantidad=datos["cantidad"],
+            nueva_ubicacion=datos["ubicacion"]
         )
 
         if resultado_inv:
@@ -647,7 +405,10 @@ class ProductosView(tk.Toplevel):
             messagebox.showerror("Error", mensaje_inv)
 
     def eliminar_producto(self):
-        """Elimina el producto seleccionado."""
+        """
+        Elimina el producto seleccionado.
+        """
+
         if self.id_producto_seleccionado is None:
             messagebox.showwarning("Aviso", "Selecciona un producto de la tabla.")
             return
@@ -672,7 +433,10 @@ class ProductosView(tk.Toplevel):
             messagebox.showerror("Error", mensaje)
 
     def buscar_producto(self):
-        """Busca un producto por código y lo muestra en la tabla."""
+        """
+        Busca un producto por código.
+        """
+
         codigo = self.entry_buscar.get().strip()
 
         if codigo == "":
@@ -681,69 +445,63 @@ class ProductosView(tk.Toplevel):
 
         producto = self.producto_controller.buscar_por_codigo(codigo)
 
-        # Limpiar tabla.
         for fila in self.tabla_productos.get_children():
             self.tabla_productos.delete(fila)
 
         if producto:
+            cantidad = producto[7] if len(producto) > 7 else 0
+            ubicacion = producto[8] if len(producto) > 8 else ""
+
             self.tabla_productos.insert(
                 "",
                 "end",
                 values=(
                     producto[0],
-                    producto[1],
                     producto[2],
+                    producto[1],
                     producto[3],
                     producto[4],
-                    producto[7],
-                    producto[8]
+                    cantidad,
+                    ubicacion
                 )
             )
         else:
             messagebox.showinfo("Sin resultados", "No se encontró un producto con ese código.")
 
     def limpiar_formulario(self):
-        """Limpia todos los campos del formulario."""
+        """
+        Limpia el formulario.
+        """
+
         self.id_producto_seleccionado = None
         self.id_categoria_actual = None
         self.id_proveedor_actual = None
 
-        self.entry_nombre.delete(0, tk.END)
         self.entry_codigo.delete(0, tk.END)
+        self.entry_nombre.delete(0, tk.END)
         self.entry_precio.delete(0, tk.END)
         self.entry_stock_minimo.delete(0, tk.END)
         self.entry_cantidad.delete(0, tk.END)
         self.entry_ubicacion.delete(0, tk.END)
 
-        self.tabla_productos.selection_remove(
-            self.tabla_productos.selection()
-        )
+        seleccion = self.tabla_productos.selection()
+        if seleccion:
+            self.tabla_productos.selection_remove(seleccion)
 
 
-# ==============================
-# FUNCIÓN PARA ABRIR LA VISTA (desde el menú)
-# ==============================
-
-def abrir_productos(parent=None, usuario=None):
+def abrir_productos(parent=None):
     """
-    Abre la pantalla de productos.
-    Esta función permite que la vista sea llamada desde el menú principal.
-
-    Parámetros:
-    parent: ventana padre
-    usuario: usuario autenticado
+    Abre la ventana de productos.
     """
-    ventana = ProductosView(parent, usuario)
+
+    ventana = VentanaProductos(parent)
+    ventana.grab_set()
     return ventana
 
 
-# ==============================
-# EJECUCIÓN DIRECTA PARA PRUEBAS
-# ==============================
-
 if __name__ == "__main__":
-    # Prueba sin usuario (se muestra como Administrador)
     root = tk.Tk()
-    root.withdraw()  # Ocultar ventana raíz
-    ventana = ProductosView(root)
-    ventana.mainloop()
+    root.withdraw()
+
+    VentanaProductos(root)
+    root.mainloop()

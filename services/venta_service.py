@@ -5,19 +5,22 @@
 """
 Este archivo contiene la lógica principal para procesar ventas.
 
-El service se encarga de:
-- Validar que la venta tenga productos.
-- Validar cantidades.
-- Validar precios.
-- Verificar stock disponible.
-- Calcular el total de la venta.
-- Mandar la venta al controlador para guardarla en la base de datos.
+Corrige la integración entre la pantalla Nueva Venta y la base de datos.
 
-Este archivo no dibuja pantallas.
-Solo maneja lógica del sistema.
+Qué hace:
+- Valida que la venta tenga productos.
+- Valida cantidades y precios.
+- Verifica que exista stock suficiente.
+- Calcula el total.
+- Registra la venta en la tabla venta.
+- Registra el detalle en detalle_venta.
+- Descuenta inventario.
+
+Este archivo no dibuja pantallas. Solo maneja la lógica de ventas.
 """
 
 import sqlite3
+from datetime import datetime
 
 from database.conexion import conectar_bd
 from controllers.venta_controller import VentaController
@@ -29,15 +32,11 @@ class VentaService:
     """
     Servicio de ventas.
 
-    Esta clase funciona como una capa intermedia entre la interfaz
-    y el controlador de ventas.
+    Esta clase funciona como intermediaria entre la interfaz gráfica
+    y la base de datos.
     """
 
     def __init__(self):
-        """
-        Al iniciar el servicio, se crean los controladores necesarios.
-        """
-
         self.venta_controller = VentaController()
         self.inventario_controller = InventarioController()
 
@@ -48,13 +47,6 @@ class VentaService:
     def obtener_precio_producto(self, id_producto):
         """
         Obtiene el precio de un producto desde la base de datos.
-
-        Parámetro:
-        id_producto: ID del producto.
-
-        Retorna:
-        Precio del producto si existe.
-        None si no se encuentra.
         """
 
         try:
@@ -87,15 +79,14 @@ class VentaService:
         """
         Convierte la lista de productos a un formato estándar.
 
-        Formato esperado por el sistema:
-
+        Formato usado:
         {
             "id_producto": 1,
             "cantidad": 2,
             "precio": 45.50
         }
 
-        También acepta "precio_unitario" por si otro archivo lo usa.
+        También acepta "precio_unitario" por compatibilidad.
         """
 
         productos_normalizados = []
@@ -103,14 +94,11 @@ class VentaService:
         for producto in productos:
             id_producto = producto.get("id_producto")
             cantidad = producto.get("cantidad")
-
-            # Puede venir como precio o como precio_unitario.
             precio = producto.get("precio")
 
             if precio is None:
                 precio = producto.get("precio_unitario")
 
-            # Si no se recibió precio, lo buscamos en la base de datos.
             if precio is None and id_producto is not None:
                 precio = self.obtener_precio_producto(id_producto)
 
@@ -123,15 +111,15 @@ class VentaService:
         return productos_normalizados
 
     # ==============================
-    # VALIDAR PRODUCTOS DE LA VENTA
+    # VALIDAR PRODUCTOS
     # ==============================
 
     def validar_productos(self, productos):
         """
-        Valida que la venta tenga productos correctos.
+        Valida los productos de una venta.
 
         Revisa:
-        - Que exista al menos un producto.
+        - Que haya al menos un producto.
         - Que cada producto tenga ID.
         - Que la cantidad sea entera y mayor que cero.
         - Que el precio sea numérico y mayor que cero.
@@ -140,6 +128,8 @@ class VentaService:
 
         if not productos:
             return False, "La venta debe tener al menos un producto."
+
+        cantidades_por_producto = {}
 
         for producto in productos:
             id_producto = producto.get("id_producto")
@@ -165,10 +155,13 @@ class VentaService:
             if precio <= 0:
                 return False, "El precio debe ser mayor que cero."
 
-            # Verificamos stock actual.
+            cantidades_por_producto[id_producto] = cantidades_por_producto.get(id_producto, 0) + cantidad
+
+        # Validamos stock acumulado por producto.
+        for id_producto, cantidad_total in cantidades_por_producto.items():
             stock_actual = self.inventario_controller.obtener_stock(id_producto)
 
-            if cantidad > stock_actual:
+            if cantidad_total > stock_actual:
                 return False, f"No hay suficiente existencia para el producto con ID {id_producto}."
 
         return True, "Productos válidos."
@@ -180,19 +173,14 @@ class VentaService:
     def calcular_total(self, productos):
         """
         Calcula el total de la venta.
-
-        Multiplica cantidad por precio de cada producto
-        y suma todos los subtotales.
         """
 
-        total = 0
+        total = 0.0
 
         for producto in productos:
             cantidad = int(producto.get("cantidad"))
             precio = float(producto.get("precio"))
-
-            subtotal = cantidad * precio
-            total += subtotal
+            total += cantidad * precio
 
         return total
 
@@ -200,20 +188,17 @@ class VentaService:
     # PROCESAR VENTA
     # ==============================
 
-    def procesar_venta(self, productos, id_usuario=1):
+    def procesar_venta(self, productos, id_usuario=1, metodo_pago="Efectivo"):
         """
         Procesa una venta completa.
-
-        Parámetros:
-        productos: lista de productos vendidos.
-        id_usuario: usuario que realiza la venta.
-                    Por defecto se usa 1, que corresponde al admin de prueba.
 
         Flujo:
         1. Normaliza productos.
         2. Valida productos.
         3. Calcula total.
-        4. Registra la venta con VentaController.
+        4. Guarda venta.
+        5. Guarda detalle.
+        6. Descuenta inventario.
         """
 
         if id_usuario is None:
@@ -222,40 +207,79 @@ class VentaService:
         productos = self.normalizar_productos(productos)
 
         resultado, mensaje = self.validar_productos(productos)
-
         if not resultado:
             return False, mensaje
 
         total = self.calcular_total(productos)
+        fecha = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        resultado_venta = self.venta_controller.registrar_venta(
-            productos=productos,
-            total=total,
-            id_usuario=id_usuario
-        )
+        try:
+            conexion = conectar_bd()
+            cursor = conexion.cursor()
 
-        if resultado_venta:
+            cursor.execute("""
+                INSERT INTO venta (
+                    fecha,
+                    total,
+                    id_usuario
+                )
+                VALUES (?, ?, ?)
+            """, (
+                fecha,
+                total,
+                id_usuario
+            ))
+
+            id_venta = cursor.lastrowid
+
+            for producto in productos:
+                id_producto = producto.get("id_producto")
+                cantidad = int(producto.get("cantidad"))
+                precio = float(producto.get("precio"))
+                subtotal = cantidad * precio
+
+                cursor.execute("""
+                    INSERT INTO detalle_venta (
+                        id_venta,
+                        id_producto,
+                        cantidad,
+                        subtotal
+                    )
+                    VALUES (?, ?, ?, ?)
+                """, (
+                    id_venta,
+                    id_producto,
+                    cantidad,
+                    subtotal
+                ))
+
+                cursor.execute("""
+                    UPDATE inventario
+                    SET cantidad_actual = cantidad_actual - ?
+                    WHERE id_producto = ?
+                """, (
+                    cantidad,
+                    id_producto
+                ))
+
+            conexion.commit()
+            conexion.close()
+
             return True, f"Venta registrada correctamente. Total: ${total:.2f}"
 
-        return False, "No se pudo registrar la venta."
+        except sqlite3.Error as error:
+            return False, f"Error al registrar venta: {error}"
 
     # ==============================
-    # REGISTRAR VENTA
+    # MÉTODOS AUXILIARES
     # ==============================
 
     def registrar_venta(self, productos, id_usuario=1):
         """
         Método alternativo para registrar venta.
-
-        Se deja para que otros archivos puedan llamar registrar_venta()
-        en lugar de procesar_venta().
         """
 
         return self.procesar_venta(productos, id_usuario)
-
-    # ==============================
-    # OBTENER VENTAS
-    # ==============================
 
     def obtener_ventas(self):
         """
@@ -264,20 +288,12 @@ class VentaService:
 
         return self.venta_controller.obtener_ventas()
 
-    # ==============================
-    # LISTAR VENTAS
-    # ==============================
-
     def listar_ventas(self):
         """
         Método alternativo para listar ventas.
         """
 
         return self.obtener_ventas()
-
-    # ==============================
-    # OBTENER DETALLE DE VENTA
-    # ==============================
 
     def obtener_detalle_venta(self, venta_id):
         """
@@ -289,15 +305,10 @@ class VentaService:
 
         return self.venta_controller.obtener_detalle_venta(venta_id)
 
-    # ==============================
-    # ELIMINAR VENTA
-    # ==============================
-
     def eliminar_venta(self, venta_id):
         """
         Elimina una venta.
 
-        Nota:
         En esta versión escolar, eliminar una venta no devuelve stock.
         """
 
@@ -306,28 +317,18 @@ class VentaService:
 
         resultado = self.venta_controller.eliminar_venta(venta_id)
 
+        if isinstance(resultado, tuple):
+            return resultado
+
         if resultado:
             return True, "Venta eliminada correctamente."
 
         return False, "No se pudo eliminar la venta."
 
 
-# ==============================
-# PRUEBA DEL SERVICIO
-# ==============================
-
 if __name__ == "__main__":
-    """
-    Esta prueba permite verificar que el archivo no marque errores.
-
-    No registra una venta automáticamente para evitar modificar datos
-    sin intención.
-    """
-
     servicio = VentaService()
 
     print("Ventas registradas:")
-    ventas = servicio.obtener_ventas()
-
-    for venta in ventas:
+    for venta in servicio.obtener_ventas():
         print(venta)

@@ -1,5 +1,5 @@
 # ==============================
-# Vista de LOGIN (mejora de robustez)
+# Vista de LOGIN 
 # ==============================
 
 import tkinter as tk
@@ -250,9 +250,6 @@ class LoginView(tk.Toplevel):
 
         # Verificamos si la autenticación fue exitosa.
         if usuario_autenticado:
-            # Guardamos la ventana padre antes de destruir
-            parent_ventana = self.master if self.master else self.parent_window
-            
             # Cerramos la ventana de login.
             self.destroy()
 
@@ -260,7 +257,7 @@ class LoginView(tk.Toplevel):
             from views.menu_view import MenuView
 
             # Abrimos el menú principal con el usuario autenticado.
-            menu = MenuView(parent_ventana, usuario_autenticado)
+            menu = MenuView(self.parent_window, usuario_autenticado)
             menu.focus_set()
 
         else:

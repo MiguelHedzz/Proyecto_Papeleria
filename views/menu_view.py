@@ -1,5 +1,5 @@
 # ==============================
-# Vista MENU 
+# Vista MENU
 # ==============================
 
 import tkinter as tk
@@ -11,86 +11,127 @@ class MenuView(tk.Toplevel):
     Esta clase representa el menú principal del sistema.
 
     Muestra diferentes opciones según el rol del usuario:
-    - Administrador: acceso a todas las funciones
-    - Vendedor: acceso limitado (ventas, productos, alertas)
+    - Administrador: acceso a todas las funciones.
+    - Vendedor: acceso limitado.
 
-    Desde aquí se navega a todas las demás ventanas del sistema.
+    Desde aquí se navega a las demás ventanas del sistema.
     """
 
     def __init__(self, parent, usuario):
         """
-        Este método se ejecuta automáticamente cuando se crea un objeto MenuView.
-
-        Parámetros:
-        parent: Widget padre.
-        usuario: Objeto Usuario autenticado (contiene id, nombre, rol).
+        parent: ventana principal.
+        usuario: usuario autenticado.
         """
 
         super().__init__(parent)
+
         self.parent = parent
         self.usuario = usuario
 
-        # Configuramos la ventana.
-        self.title(f"Dunder Mifflin - Menú Principal ({self.usuario.rol})")
+        # Obtenemos nombre y rol de forma segura.
+        self.nombre_usuario = self._obtener_nombre_usuario()
+        self.rol_usuario = self._obtener_rol_usuario()
+
+        self.title(f"Dunder Mifflin - Menú Principal ({self.rol_usuario})")
         self.geometry("900x600")
         self.configure(bg="#e8ecef")
+        self.resizable(False, False)
 
-        # Centramos la ventana.
         self._centrar_ventana()
-
-        # Construimos la interfaz.
         self._construir_interfaz()
+
+    # ==============================
+    # OBTENER DATOS DEL USUARIO
+    # ==============================
+
+    def _obtener_nombre_usuario(self):
+        """
+        Obtiene el nombre del usuario aunque venga como objeto,
+        diccionario o tupla.
+        """
+
+        if hasattr(self.usuario, "nombre"):
+            return self.usuario.nombre
+
+        if isinstance(self.usuario, dict):
+            return self.usuario.get("nombre", "Usuario")
+
+        if isinstance(self.usuario, tuple) or isinstance(self.usuario, list):
+            if len(self.usuario) > 1:
+                return self.usuario[1]
+
+        return "Usuario"
+
+    def _obtener_rol_usuario(self):
+        """
+        Obtiene el rol del usuario aunque venga como objeto,
+        diccionario o tupla.
+        """
+
+        if hasattr(self.usuario, "rol"):
+            return self.usuario.rol
+
+        if isinstance(self.usuario, dict):
+            return self.usuario.get("rol", "Administrador")
+
+        if isinstance(self.usuario, tuple) or isinstance(self.usuario, list):
+            if len(self.usuario) > 3:
+                return self.usuario[3]
+
+        return "Administrador"
 
     # ==============================
     # MÉTODOS PRIVADOS
     # ==============================
 
     def _centrar_ventana(self):
-        """Centra la ventana en la pantalla."""
+        """
+        Centra la ventana en la pantalla.
+        """
+
         self.update_idletasks()
-        ancho = self.winfo_width()
-        alto = self.winfo_height()
+
+        ancho = 900
+        alto = 600
+
         x = (self.winfo_screenwidth() // 2) - (ancho // 2)
         y = (self.winfo_screenheight() // 2) - (alto // 2)
-        self.geometry(f"+{x}+{y}")
+
+        self.geometry(f"{ancho}x{alto}+{x}+{y}")
 
     def _construir_interfaz(self):
-        """Construye todos los elementos visuales del menú principal."""
+        """
+        Construye todos los elementos visuales del menú principal.
+        """
 
-        # Frame principal con padding.
         frame_principal = tk.Frame(self, bg="#e8ecef")
         frame_principal.pack(fill=tk.BOTH, expand=True, padx=40, pady=30)
 
-        # Título de bienvenida.
         lbl_bienvenida = tk.Label(
             frame_principal,
-            text=f"Bienvenido, {self.usuario.nombre}",
+            text=f"Bienvenido, {self.nombre_usuario}",
             font=("Segoe UI", 24, "bold"),
             bg="#e8ecef",
             fg="#2c3e50"
         )
         lbl_bienvenida.pack(pady=(0, 5))
 
-        # Rol del usuario.
         lbl_rol = tk.Label(
             frame_principal,
-            text=f"Rol: {self.usuario.rol}",
+            text=f"Rol: {self.rol_usuario}",
             font=("Segoe UI", 14),
             bg="#e8ecef",
             fg="#7f8c8d"
         )
         lbl_rol.pack(pady=(0, 30))
 
-        # Separador.
-        separador = ttk.Separator(frame_principal, orient='horizontal')
+        separador = ttk.Separator(frame_principal, orient="horizontal")
         separador.pack(fill=tk.X, pady=10)
 
-        # Frame para los botones (grid de 2 columnas).
         frame_botones = tk.Frame(frame_principal, bg="#e8ecef")
         frame_botones.pack(pady=30)
 
-        # Botones según el rol.
-        if self.usuario.rol == "Administrador":
+        if self.rol_usuario == "Administrador":
             botones = [
                 ("Administrar Productos", self._abrir_productos),
                 ("Gestionar Categorías", self._abrir_categorias),
@@ -108,7 +149,6 @@ class MenuView(tk.Toplevel):
                 ("Alertas de Stock", self._abrir_alertas),
             ]
 
-        # Creamos los botones en grid.
         for i, (texto, comando) in enumerate(botones):
             btn = tk.Button(
                 frame_botones,
@@ -126,7 +166,6 @@ class MenuView(tk.Toplevel):
             )
             btn.grid(row=i // 2, column=i % 2, padx=15, pady=15)
 
-        # Botón de cerrar sesión.
         btn_salir = tk.Button(
             frame_principal,
             text="Cerrar Sesión",
@@ -147,92 +186,128 @@ class MenuView(tk.Toplevel):
     # ==============================
 
     def _abrir_productos(self):
-        """Abre la ventana de administración de productos."""
+        """
+        Abre la ventana real de productos.
+
+        Esta ya debe existir en:
+        views/productos_view.py
+        """
+
         try:
-            from views.productos_view import ProductosView
-            ventana = ProductosView(self, self.usuario)
+            from views.productos_view import VentanaProductos
+
+            ventana = VentanaProductos(self)
             ventana.focus_set()
-        except ImportError:
-            messagebox.showinfo("En desarrollo", "Módulo de productos en construcción")
+
+        except Exception as error:
+            messagebox.showerror(
+                "Error",
+                f"No se pudo abrir la ventana de productos.\n\nDetalle: {error}"
+            )
 
     def _abrir_categorias(self):
-        """Abre la ventana de gestión de categorías."""
-        try:
-            from views.categorias_view import CategoriasView
-            ventana = CategoriasView(self, self.usuario)
-            ventana.focus_set()
-        except ImportError:
-            messagebox.showinfo("En desarrollo", "Módulo de categorías en construcción")
+        """
+        Ventana pendiente.
+        """
+
+        self._mostrar_pendiente("Gestión de Categorías")
 
     def _abrir_proveedores(self):
-        """Abre la ventana de gestión de proveedores."""
-        try:
-            from views.proveedores_view import ProveedoresView
-            ventana = ProveedoresView(self, self.usuario)
-            ventana.focus_set()
-        except ImportError:
-            messagebox.showinfo("En desarrollo", "Módulo de proveedores en construcción")
+        """
+        Ventana pendiente.
+        """
+
+        self._mostrar_pendiente("Gestión de Proveedores")
 
     def _abrir_inventario(self):
-        """Abre la ventana de control de inventario."""
-        try:
-            from views.inventario_view import InventarioView
-            ventana = InventarioView(self, self.usuario)
-            ventana.focus_set()
-        except ImportError:
-            messagebox.showinfo("En desarrollo", "Módulo de inventario en construcción")
+        """
+        Ventana pendiente.
+        """
+
+        self._mostrar_pendiente("Control de Inventario")
 
     def _abrir_ventas(self):
-        """Abre la ventana de registro de ventas."""
-        try:
-            from views.ventas_view import VentasView
-            ventana = VentasView(self, self.usuario)
-            ventana.focus_set()
-        except ImportError:
-            messagebox.showinfo("En desarrollo", "Módulo de ventas en construcción")
+        """
+        Ventana pendiente.
+        """
+
+        self._mostrar_pendiente("Registro de Ventas")
 
     def _abrir_alertas(self):
-        """Abre la ventana de alertas de stock bajo."""
-        try:
-            from views.alertas_view import AlertasView
-            ventana = AlertasView(self, self.usuario)
-            ventana.focus_set()
-        except ImportError:
-            messagebox.showinfo("En desarrollo", "Módulo de alertas en construcción")
+        """
+        Ventana pendiente.
+        """
+
+        self._mostrar_pendiente("Alertas de Stock")
 
     def _abrir_reportes(self):
-        """Abre la ventana de reportes."""
-        try:
-            from views.reportes_view import ReportesView
-            ventana = ReportesView(self, self.usuario)
-            ventana.focus_set()
-        except ImportError:
-            messagebox.showinfo("En desarrollo", "Módulo de reportes en construcción")
+        """
+        Ventana pendiente.
+        """
+
+        self._mostrar_pendiente("Reportes")
 
     def _abrir_usuarios(self):
-        """Abre la ventana de administración de usuarios."""
-        try:
-            from views.usuarios_view import UsuariosView
-            ventana = UsuariosView(self, self.usuario)
-            ventana.focus_set()
-        except ImportError:
-            messagebox.showinfo("En desarrollo", "Módulo de usuarios en construcción")
+        """
+        Ventana pendiente.
+        """
+
+        self._mostrar_pendiente("Administración de Usuarios")
+
+    def _mostrar_pendiente(self, modulo):
+        """
+        Muestra un aviso para módulos que todavía no tienen ventana lista.
+        """
+
+        messagebox.showinfo(
+            "Módulo pendiente",
+            f"El módulo '{modulo}' todavía no está conectado a una ventana funcional."
+        )
 
     def _cerrar_sesion(self):
-        """Cierra la sesión y vuelve a la pantalla de login."""
-        from views.login_view import LoginView
+        """
+        Cierra el menú y vuelve a mostrar la ventana principal si existe.
+        """
 
-        # Destruimos el menú actual.
+        confirmar = messagebox.askyesno(
+            "Cerrar sesión",
+            "¿Seguro que deseas cerrar sesión?"
+        )
+
+        if not confirmar:
+            return
+
         self.destroy()
 
-        # Abrimos nuevamente el login.
-        login = LoginView(self.parent)
-        login.focus_set()
+        try:
+            self.parent.deiconify()
+        except Exception:
+            pass
 
     # ==============================
     # MÉTODOS PÚBLICOS
     # ==============================
 
     def mostrar(self):
-        """Muestra la ventana del menú."""
+        """
+        Muestra la ventana del menú.
+        """
+
         self.wait_window()
+
+
+# ==============================
+# PRUEBA DIRECTA
+# ==============================
+
+if __name__ == "__main__":
+    class UsuarioPrueba:
+        def __init__(self):
+            self.nombre = "Administrador"
+            self.rol = "Administrador"
+
+    root = tk.Tk()
+    root.withdraw()
+
+    menu = MenuView(root, UsuarioPrueba())
+    menu.mainloop()
