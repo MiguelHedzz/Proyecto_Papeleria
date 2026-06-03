@@ -2,7 +2,7 @@
 
 Proyecto escolar desarrollado en **Python** con el objetivo de administrar el inventario de una papelería de manera sencilla, organizada y funcional.
 
-El sistema está diseñado para manejar productos, inventario, usuarios, ventas, alertas de stock bajo y reportes básicos. Actualmente se encuentra en una etapa inicial de implementación, con la estructura principal del proyecto, base de datos, login básico y controlador CRUD para productos.
+El sistema está diseñado para manejar productos, inventario, usuarios, ventas, alertas de stock bajo y reportes básicos. El proyecto se encuentra finalizado y completamente funcional, integrando la estructura principal, base de datos, módulos CRUD, sistema de alertas y reportes.
 
 ---
 
@@ -18,23 +18,24 @@ El sistema busca reemplazar el control manual de inventario por una aplicación 
 
 El proyecto contempla los siguientes módulos:
 
-- Inicio de sesión.
-- Registro de usuarios.
-- Administración de productos.
-- Gestión de categorías.
-- Gestión de proveedores.
-- Control de inventario.
-- Registro de ventas.
-- Alertas de stock bajo.
-- Reportes básicos.
+- Módulo de Login
+- Módulo de Usuarios
+- Módulo de Productos
+- Módulo de Categorías
+- Módulo de Proveedores
+- Módulo de Inventario
+- Módulo de Ventas
+- Módulo de Alertas
+- Módulo de Reportes
+- Módulo de Respaldos
 
 ---
 
 ## Tecnologías utilizadas
 
 - Python
-- SQLite
-- Tkinter
+- SQLite (Base de datos relacional)
+- Tkinter (Interfaz gráfica de usuario)
 - Visual Studio Code
 - Git
 - GitHub
@@ -42,8 +43,6 @@ El proyecto contempla los siguientes módulos:
 ---
 
 ## Estado actual del proyecto
-
-El proyecto se encuentra en desarrollo.
 
 Actualmente cuenta con:
 
@@ -80,31 +79,11 @@ La base de datos se genera automáticamente al ejecutar el archivo de creación 
 
 ### CRUD de productos
 
-La clase seleccionada para el formulario CRUD es **Producto**.
-
-Actualmente el controlador de productos permite:
-
-- Registrar productos.
-- Listar productos.
-- Buscar productos por código.
-- Actualizar información de productos.
-- Eliminar productos.
-- Crear inventario inicial al registrar un producto.
-
----
-
-## Funcionalidades pendientes
-
-Todavía falta completar:
-
-- Pantalla visual completa para productos.
-- Registro visual de usuarios.
-- Módulo completo de ventas.
-- Módulo completo de inventario.
-- Alertas funcionales de stock bajo.
-- Reportes básicos.
-- Conectar las vistas con los controladores.
-- Adaptar la interfaz al diseño realizado en Figma.
+Se implementaron controladores para realizar las siguientes operaciones principales:
+- **Productos:** Registrar, listar, buscar por código, actualizar y eliminar. (Al registrar, se crea el inventario inicial automáticamente).
+- **Inventario:** Control de entradas, salidas y verificación automática de stock mínimo.
+- **Ventas:** Generación de tickets/comprobantes de venta y descuento automático del inventario.
+- **Reportes y Respaldos:** Exportación de la información de ventas/inventario y creación de copias de seguridad de la base de datos local.
 
 ---
 
@@ -112,39 +91,70 @@ Todavía falta completar:
 
 ```text
 Proyecto_Papeleria/
-│
-├── main.py
-├── README.md
-├── requirements.txt
-│
-├── database/
-│   ├── __init__.py
-│   ├── conexion.py
-│   └── crear_tablas.py
-│
-├── models/
-│   ├── __init__.py
-│   ├── usuario.py
-│   ├── producto.py
-│   ├── categoria.py
-│   ├── proveedor.py
-│   ├── inventario.py
-│   ├── venta.py
-│   ├── detalle_venta.py
-│   ├── alerta.py
-│   └── reporte.py
-│
-├── controllers/
-│   ├── __init__.py
-│   └── producto_controller.py
-│
-├── services/
-│
-├── utils/
-│
-├── views/
-│
-└── assets/
+|
+│   .gitignore
+│   main.py
+│   README.md
+│   requirements.txt
+│   
+├───assets
+│       estilos.py
+│       logo.png
+│       
+├───controllers
+│       alerta_controller.py
+│       categoria_controller.py
+│       inventario_controller.py
+│       producto_controller.py
+│       proveedor_controller.py
+│       reporte_controller.py
+│       respaldo_controller.py
+│       usuario_controller.py
+│       venta_controller.py
+│       
+├───database
+│       conexion.py
+│       crear_tablas.py
+│       inventario.db
+│       
+├───models
+│       alerta.py
+│       categoria.py
+│       detalle_venta.py
+│       inventario.py
+│       producto.py
+│       proveedor.py
+│       reporte.py
+│       respaldo.py
+│       usuario.py
+│       venta.py
+│       
+├───services
+│       auth_service.py
+│       inventario_service.py
+│       reporte_service.py
+│       venta_service.py
+│       __init__.py
+│       
+├───utils
+│       exportar.py
+│       mensajes.py
+│       validaciones.py
+│       __init__.py
+│       
+└───views
+        alertas_view.py
+        categorias_view.py
+        inventario_view.py
+        layout_view.py
+        login_view.py
+        menu_view.py
+        productos_view.py
+        proveedores_view.py
+        reportes_view.py
+        respaldos_view.py
+        usuarios_view.py
+        ventas_view.py
 ```
 
 ---
@@ -155,11 +165,11 @@ Proyecto_Papeleria/
 |---|---|
 | `main.py` | Archivo principal que inicia la aplicación |
 | `database/` | Contiene la conexión con SQLite y la creación de tablas |
-| `models/` | Contiene las clases principales del sistema |
-| `controllers/` | Contiene la lógica para manejar operaciones como registrar o consultar productos |
-| `services/` | Carpeta pensada para reglas de negocio más específicas |
-| `utils/` | Carpeta pensada para funciones auxiliares como validaciones o mensajes |
-| `views/` | Carpeta donde se colocarán las pantallas del sistema |
+| `models/` | Contiene las clases principales del sistema y diccionarios de datos |
+| `controllers/` | Contiene la lógica para manejar las operaciones e interactuar con la BD |
+| `services/` | Carpeta para reglas de negocio complejas |
+| `utils/` | Funciones auxiliares como validaciones, mensajes emergentes o exportaciones |
+| `views/` | Contiene todas las pantallas e interfaces gráficas construidas con Tkinter |
 | `assets/` | Carpeta para imágenes, íconos o recursos visuales |
 
 ---
@@ -168,17 +178,18 @@ Proyecto_Papeleria/
 
 El sistema contempla los siguientes modelos:
 
-| Modelo | Descripción |
+Modelo | Descripción |
 |---|---|
-| Usuario | Representa a los usuarios que ingresan al sistema |
-| Producto | Representa los artículos de papelería |
-| Categoría | Clasifica los productos por tipo |
-| Proveedor | Representa a quienes suministran productos |
-| Inventario | Controla existencias y ubicación de productos |
-| Venta | Registra las ventas realizadas |
-| DetalleVenta | Guarda los productos incluidos en una venta |
-| Alerta | Registra avisos de stock bajo |
-| Reporte | Representa consultas o reportes del sistema |
+| Usuario | Representa al administrador o vendedor que accede al sistema. |
+| Producto | Contiene la información de los artículos de papelería. |
+| Categoria | Agrupa productos según su tipo. |
+| Proveedor | Guarda datos básicos de quien suministra productos. |
+| Inventario | Controla la cantidad actual y ubicación de cada producto. |
+| Venta | Registra las ventas realizadas por los usuarios. |
+| DetalleVenta | Guarda los productos incluidos en una venta. |
+| Alerta | Registra avisos cuando el stock llega al mínimo. |
+| Reporte | Permite consultar información del inventario y ventas. |
+| Respaldo | Representa la copia de seguridad física e historial del sistema. |
 
 ---
 
@@ -190,14 +201,15 @@ Tablas principales:
 
 | Tabla | Propósito |
 |---|---|
-| usuario | Guarda usuarios, contraseñas y roles |
-| categoria | Guarda las categorías de productos |
-| proveedor | Guarda información de proveedores |
-| producto | Guarda los datos de los productos |
-| inventario | Guarda existencias y ubicación de productos |
-| venta | Guarda ventas realizadas |
-| detalle_venta | Guarda los productos vendidos en cada venta |
-| alerta | Guarda alertas de stock bajo |
+| usuario | Guarda los datos de acceso y rol de cada usuario. |
+| categoria | Clasifica los productos de la papelería. |
+| proveedor | Registra información básica de los proveedores. |
+| producto | Almacena datos generales de cada artículo. |
+| inventario | Controla la existencia actual y ubicación del producto. |
+| venta | Registra ventas realizadas por los usuarios. |
+| detalle_venta | Guarda los productos y cantidades de cada venta. |
+| alerta | Registra alertas generadas por stock bajo. |
+| respaldo | Guarda el historial de copias de seguridad realizadas. |
 
 ---
 
@@ -205,11 +217,14 @@ Tablas principales:
 
 | Clave | Requisito |
 |---|---|
-| RF01 | Administración de productos mediante CRUD |
-| RF04 | Registro de entradas al inventario |
-| RF05 | Realizar y consultar ventas |
-| RF06 | Generación de alertas de stock mínimo |
-| RF08 | Inicio de sesión con usuario y contraseña |
+| RF01 | Administración de productos (CRUD). |
+| RF02 | Consultas y búsquedas de productos. |
+| RF04 | Registro de entradas al inventario. |
+| RF05 | Realizar y consultar ventas con registro de vendedor y total. |
+| RF06 | Generación de alertas de stock mínimo. |
+| RF07 | Reportes de sistema. |
+| RF08 | Inicio de sesión con usuario y contraseña. |
+| RF09 | Gestión de usuarios y permisos. |
 
 ---
 
@@ -222,10 +237,10 @@ Para ejecutar el proyecto se necesita:
 - Git, en caso de trabajar con repositorio.
 - Sistema operativo Windows.
 
-Hasta el avance actual, el proyecto no requiere librerías externas obligatorias, ya que utiliza módulos incluidos en Python como:
-
-- `sqlite3`
-- `tkinter`
+El proyecto está diseñado para funcionar sin librerías externas de terceros, utilizando exclusivamente las integradas en Python:
+- `sqlite3` (Manejo de base de datos)
+- `tkinter` (Interfaz gráfica)
+- `shutil` (Gestión de copias de seguridad)
 
 ---
 
@@ -234,7 +249,7 @@ Hasta el avance actual, el proyecto no requiere librerías externas obligatorias
 ### 1. Clonar el repositorio
 
 ```bash
-git clone URL_DEL_REPOSITORIO
+git clone https://github.com/MiguelHedzz/Proyecto_Papeleria.git
 ```
 
 ### 2. Entrar a la carpeta del proyecto
@@ -283,17 +298,9 @@ python main.py
 
 ## Uso del sistema
 
-Al ejecutar la aplicación se abre la ventana principal del sistema.
+Al ejecutar la aplicación se abrirá la ventana principal. Inicia sesión con las credenciales de administrador (`admin` / `admin123`). 
 
-Para iniciar sesión se puede usar el usuario administrador de prueba:
-
-```text
-Usuario: admin
-Contraseña: admin123
-```
-
-Después de iniciar sesión, el sistema muestra un menú principal con las opciones principales:
-
+El menú de navegación principal brinda acceso a todas las operaciones:
 - Administrar productos.
 - Gestionar categorías.
 - Gestionar proveedores.
@@ -302,52 +309,26 @@ Después de iniciar sesión, el sistema muestra un menú principal con las opcio
 - Alertas de stock bajo.
 - Reportes.
 - Administrar usuarios.
-
----
-
-## CRUD seleccionado
-
-Para esta etapa del proyecto se seleccionó la clase **Producto** como formulario CRUD principal.
-
-El CRUD de productos permitirá:
-
-- Crear un nuevo producto.
-- Consultar productos registrados.
-- Buscar productos por código.
-- Actualizar datos de un producto.
-- Eliminar productos.
-- Registrar cantidad inicial en inventario.
-
-Campos principales del producto:
-
-```text
-id_producto
-nombre
-codigo
-precio
-stock_minimo
-id_categoria
-id_proveedor
-```
+- Realizar copia de seguridad.
 
 ---
 
 ## Arquitectura del sistema
 
-El sistema se organiza con una arquitectura sencilla por capas:
+El sistema está desarrollado y estructurado bajo una **Arquitectura de Tres Capas** para garantizar el orden y mantenibilidad del código:
 
 ```text
-Interfaz de usuario
+Capa de Presentación
+(Pantallas en Tkinter, formularios, menú y validaciones visuales)
         ↓
-Controladores
+Capa de Lógica de Negocio
+(Reglas del sistema: ventas, entradas, alertas, usuarios y reportes)
         ↓
-Modelos / Servicios
+Capa de Acceso a Datos
+(Consultas, altas, bajas y actualizaciones mediante Controladores)
         ↓
-Base de datos SQLite
+Base de Datos Relacional (SQLite)
 ```
-
-Esta estructura permite separar la parte visual, la lógica del sistema y el almacenamiento de datos.
-
 
 ---
 
