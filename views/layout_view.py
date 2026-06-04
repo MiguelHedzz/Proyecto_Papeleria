@@ -10,7 +10,7 @@ Incluye:
 - Topbar superior blanca.
 - Area principal gris claro.
 - Card blanca central.
-- Pantallas internas: Nueva Venta, Productos, Categorias, Proveedores, Inventario, Reportes y Soporte.
+- Pantallas internas: Nueva Venta, Productos, Categorias, Proveedores, Inventario, Reportes, Respaldos y Soporte.
 """
 
 import os
@@ -199,6 +199,7 @@ class LayoutPrincipal(tk.Toplevel):
             self.crear_boton_sidebar("Proveedores", self.mostrar_proveedores)
             self.crear_boton_sidebar("Inventario", self.mostrar_inventario)
             self.crear_boton_sidebar("Reportes", self.mostrar_reportes)
+            self.crear_boton_sidebar("Respaldos", self.mostrar_respaldos)
 
         # Espacio flexible para empujar el boton de cerrar sesion hacia abajo
         espacio = tk.Frame(self.sidebar, bg=self.color_sidebar)
@@ -681,9 +682,39 @@ class LayoutPrincipal(tk.Toplevel):
 
             for item in self.carrito:
                 cursor.execute("""
-                    INSERT INTO detalle_venta (id_venta, id_producto, cantidad, subtotal)
-                    VALUES (?, ?, ?, ?)
-                """, (id_venta, item["id_producto"], item["cantidad"], item["subtotal"]))
+                    INSERT INTO detalle_venta (
+                        id_venta,
+                        id_producto,
+                        cantidad,
+                        precio_unitario,
+                        subtotal
+                    )
+                    VALUES (?, ?, ?, ?, ?)
+                """, (
+                    id_venta,
+                    item["id_producto"],
+                    item["cantidad"],
+                    item["precio"],
+                    item["subtotal"]
+                ))
+
+                cursor.execute("""
+                    INSERT INTO movimiento_inventario (
+                        id_producto,
+                        tipo_movimiento,
+                        cantidad,
+                        fecha,
+                        id_usuario,
+                        motivo
+                    )
+                    VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?, ?)
+                """, (
+                    item["id_producto"],
+                    "SALIDA",
+                    item["cantidad"],
+                    self.id_usuario,
+                    f"Venta #{id_venta}"
+                ))
 
                 cursor.execute("""
                     UPDATE inventario
@@ -709,8 +740,8 @@ class LayoutPrincipal(tk.Toplevel):
 
                     if existe_alerta == 0:
                         cursor.execute("""
-                            INSERT INTO alerta (id_producto, mensaje, atendida)
-                            VALUES (?, ?, 0)
+                            INSERT INTO alerta (id_producto, mensaje, fecha, atendida)
+                            VALUES (?, ?, CURRENT_TIMESTAMP, 0)
                         """, (item["id_producto"], f"Stock bajo: {item['nombre']}. Quedan {resultado_stock[0]} unidades."))
 
             conexion.commit()
@@ -745,7 +776,7 @@ class LayoutPrincipal(tk.Toplevel):
             venta = cursor.fetchone()
 
             cursor.execute("""
-                SELECT p.nombre, dv.cantidad, dv.subtotal
+                SELECT p.nombre, dv.cantidad, dv.precio_unitario, dv.subtotal
                 FROM detalle_venta dv
                 JOIN producto p ON dv.id_producto = p.id_producto
                 WHERE dv.id_venta = ?
@@ -842,6 +873,28 @@ class LayoutPrincipal(tk.Toplevel):
     # PANTALLA REPORTES
     # ==============================
 
+
+    def obtener_valor_fila(self, fila, clave, indice, valor_default=""):
+        """
+        Obtiene un valor desde una fila de SQLite.
+
+        Sirve para evitar que en las tablas se muestre:
+        <sqlite3.Row object at ...>
+
+        Puede leer:
+        - sqlite3.Row usando el nombre de columna.
+        - tupla usando el índice.
+        """
+
+        try:
+            return fila[clave]
+        except Exception:
+            try:
+                return fila[indice]
+            except Exception:
+                return valor_default
+
+
     def mostrar_reportes(self):
         """
         Muestra la pantalla de reportes del sistema.
@@ -935,14 +988,17 @@ class LayoutPrincipal(tk.Toplevel):
         tab_stock = tk.Frame(notebook, bg="white")
         tab_ventas = tk.Frame(notebook, bg="white")
         tab_productos = tk.Frame(notebook, bg="white")
+        tab_mas_vendidos = tk.Frame(notebook, bg="white")
 
         notebook.add(tab_stock, text="Stock bajo")
         notebook.add(tab_ventas, text="Ventas")
         notebook.add(tab_productos, text="Productos")
+        notebook.add(tab_mas_vendidos, text="Mas vendidos")
 
         self.crear_tabla_stock_bajo(tab_stock)
         self.crear_tabla_ventas(tab_ventas)
         self.crear_tabla_productos_reporte(tab_productos)
+        self.crear_tabla_productos_mas_vendidos(tab_mas_vendidos)
 
     def crear_tabla_stock_bajo(self, parent):
         """
@@ -967,7 +1023,15 @@ class LayoutPrincipal(tk.Toplevel):
         except Exception:
             datos = []
         for item in datos:
-            tabla.insert("", "end", values=item)
+            valores = (
+                self.obtener_valor_fila(item, "id_producto", 0),
+                self.obtener_valor_fila(item, "nombre", 1),
+                self.obtener_valor_fila(item, "codigo", 2),
+                self.obtener_valor_fila(item, "stock_minimo", 3),
+                self.obtener_valor_fila(item, "cantidad_actual", 4),
+                self.obtener_valor_fila(item, "ubicacion", 5),
+            )
+            tabla.insert("", "end", values=valores)
 
     def crear_tabla_ventas(self, parent):
         """
@@ -1029,6 +1093,46 @@ class LayoutPrincipal(tk.Toplevel):
         for producto in datos:
             cantidad = producto[7] if len(producto) > 7 else 0
             tabla.insert("", "end", values=(producto[0], producto[2], producto[1], f"${producto[3]:.2f}", cantidad))
+
+
+    def crear_tabla_productos_mas_vendidos(self, parent):
+        """
+        Crea la tabla de productos mas vendidos.
+        """
+        columnas = ("id", "codigo", "nombre", "cantidad_vendida", "total_vendido")
+        tabla = ttk.Treeview(parent, columns=columnas, show="headings", height=8)
+        tabla.heading("id", text="ID")
+        tabla.heading("codigo", text="Codigo")
+        tabla.heading("nombre", text="Nombre")
+        tabla.heading("cantidad_vendida", text="Cantidad vendida")
+        tabla.heading("total_vendido", text="Total vendido")
+        tabla.column("id", width=60, anchor="center")
+        tabla.column("codigo", width=120, anchor="center")
+        tabla.column("nombre", width=280)
+        tabla.column("cantidad_vendida", width=150, anchor="center")
+        tabla.column("total_vendido", width=150, anchor="center")
+        tabla.pack(fill="both", expand=True, padx=10, pady=10)
+
+        try:
+            datos = self.reporte_service.reporte_productos_mas_vendidos()
+        except Exception:
+            datos = []
+
+        for producto in datos:
+            total_vendido = self.obtener_valor_fila(producto, "total_vendido", 4, 0)
+            try:
+                total_vendido = f"${float(total_vendido):.2f}"
+            except Exception:
+                total_vendido = "$0.00"
+
+            valores = (
+                self.obtener_valor_fila(producto, "id_producto", 0),
+                self.obtener_valor_fila(producto, "codigo", 1),
+                self.obtener_valor_fila(producto, "nombre", 2),
+                self.obtener_valor_fila(producto, "cantidad_vendida", 3, 0),
+                total_vendido
+            )
+            tabla.insert("", "end", values=valores)
 
     # ==============================
     # EXPORTAR REPORTES A CSV
@@ -1120,6 +1224,36 @@ class LayoutPrincipal(tk.Toplevel):
                 messagebox.showinfo("Exito", f"Reporte exportado a:\n{archivo}")
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo exportar:\n{e}")
+
+
+    # ==============================
+    # PANTALLA RESPALDOS
+    # ==============================
+
+    def mostrar_respaldos(self):
+        """
+        Abre la ventana de respaldos del sistema.
+
+        Esta opción solo está disponible para el administrador.
+        """
+        if self.rol_usuario != "Administrador":
+            messagebox.showwarning(
+                "Acceso denegado",
+                "Solo el administrador puede realizar respaldos."
+            )
+            return
+
+        try:
+            from views.respaldos_view import VentanaRespaldos
+
+            ventana = VentanaRespaldos(self)
+            ventana.focus_set()
+
+        except Exception as error:
+            messagebox.showerror(
+                "Error",
+                f"No se pudo abrir la ventana de respaldos.\n\nDetalle: {error}"
+            )
 
     # ==============================
     # PANTALLA SOPORTE

@@ -2,6 +2,17 @@
 # VISTA DE INVENTARIO
 # ==============================
 
+"""
+Vista para inventario.
+
+Permite:
+- Ver inventario actual.
+- Registrar entradas.
+- Registrar salidas.
+- Guardar historial de movimientos.
+- Registrar motivo del movimiento.
+"""
+
 import os
 import sys
 import tkinter as tk
@@ -11,43 +22,51 @@ RUTA_PROYECTO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if RUTA_PROYECTO not in sys.path:
     sys.path.insert(0, RUTA_PROYECTO)
 
-from controllers.producto_controller import ProductoController
 from controllers.inventario_controller import InventarioController
 
 
 class InventarioView(tk.Toplevel):
     """
-    Ventana para gestionar el inventario.
+    Ventana para gestionar inventario.
     """
 
     def __init__(self, parent=None, usuario=None):
         super().__init__(parent)
 
         self.title("Inventario")
-        self.geometry("1000x620")
-        self.minsize(900, 560)
+        self.geometry("1050x650")
+        self.minsize(950, 600)
         self.configure(bg="#ecf0f1")
 
-        self.producto_controller = ProductoController()
-        self.inventario_controller = InventarioController()
         self.usuario = usuario
+        self.inventario_controller = InventarioController()
         self.productos = []
 
         self.crear_interfaz()
         self.cargar_productos()
 
+    def obtener_id_usuario(self):
+        if self.usuario is None:
+            return 1
+        if hasattr(self.usuario, "id_usuario"):
+            return self.usuario.id_usuario
+        if isinstance(self.usuario, dict):
+            return self.usuario.get("id_usuario", 1)
+        if isinstance(self.usuario, (tuple, list)) and len(self.usuario) > 0:
+            return self.usuario[0]
+        return 1
+
     def crear_interfaz(self):
         contenedor = tk.Frame(self, bg="#ecf0f1")
         contenedor.pack(fill="both", expand=True, padx=25, pady=25)
 
-        titulo = tk.Label(
+        tk.Label(
             contenedor,
             text="Inventario",
             bg="#ecf0f1",
             fg="#2c3e50",
             font=("Segoe UI", 24, "bold")
-        )
-        titulo.pack(anchor="w", pady=(0, 15))
+        ).pack(anchor="w", pady=(0, 15))
 
         card = tk.Frame(contenedor, bg="white", padx=20, pady=20)
         card.pack(fill="both", expand=True)
@@ -63,44 +82,23 @@ class InventarioView(tk.Toplevel):
         )
         frame_formulario.pack(fill="x", pady=(0, 15))
 
-        tk.Label(
-            frame_formulario,
-            text="Producto:",
-            bg="white",
-            fg="#2c3e50",
-            font=("Segoe UI", 10, "bold")
-        ).grid(row=0, column=0, sticky="w", padx=(0, 8), pady=8)
+        tk.Label(frame_formulario, text="Producto:", bg="white", fg="#2c3e50", font=("Segoe UI", 10, "bold")).grid(row=0, column=0, sticky="w", padx=(0, 8), pady=8)
+        self.combo_productos = ttk.Combobox(frame_formulario, state="readonly", font=("Segoe UI", 10), width=50)
+        self.combo_productos.grid(row=0, column=1, sticky="w", padx=(0, 20), pady=8, ipady=4)
 
-        self.combo_productos = ttk.Combobox(
-            frame_formulario,
-            state="readonly",
-            font=("Segoe UI", 10),
-            width=45
-        )
-        self.combo_productos.grid(row=0, column=1, sticky="w", padx=(0, 20), pady=8)
-
-        tk.Label(
-            frame_formulario,
-            text="Cantidad:",
-            bg="white",
-            fg="#2c3e50",
-            font=("Segoe UI", 10, "bold")
-        ).grid(row=0, column=2, sticky="w", padx=(0, 8), pady=8)
-
+        tk.Label(frame_formulario, text="Cantidad:", bg="white", fg="#2c3e50", font=("Segoe UI", 10, "bold")).grid(row=0, column=2, sticky="w", padx=(0, 8), pady=8)
         self.entry_cantidad = tk.Entry(frame_formulario, font=("Segoe UI", 10), width=12)
         self.entry_cantidad.grid(row=0, column=3, sticky="w", padx=(0, 20), pady=8, ipady=4)
         self.entry_cantidad.insert(0, "1")
 
-        tk.Label(
-            frame_formulario,
-            text="Ubicación:",
-            bg="white",
-            fg="#2c3e50",
-            font=("Segoe UI", 10, "bold")
-        ).grid(row=1, column=0, sticky="w", padx=(0, 8), pady=8)
-
-        self.entry_ubicacion = tk.Entry(frame_formulario, font=("Segoe UI", 10), width=45)
+        tk.Label(frame_formulario, text="Ubicacion:", bg="white", fg="#2c3e50", font=("Segoe UI", 10, "bold")).grid(row=1, column=0, sticky="w", padx=(0, 8), pady=8)
+        self.entry_ubicacion = tk.Entry(frame_formulario, font=("Segoe UI", 10), width=50)
         self.entry_ubicacion.grid(row=1, column=1, sticky="w", padx=(0, 20), pady=8, ipady=4)
+
+        tk.Label(frame_formulario, text="Motivo:", bg="white", fg="#2c3e50", font=("Segoe UI", 10, "bold")).grid(row=1, column=2, sticky="w", padx=(0, 8), pady=8)
+        self.entry_motivo = tk.Entry(frame_formulario, font=("Segoe UI", 10), width=30)
+        self.entry_motivo.grid(row=1, column=3, sticky="w", padx=(0, 20), pady=8, ipady=4)
+        self.entry_motivo.insert(0, "Movimiento manual")
 
         frame_botones = tk.Frame(card, bg="white")
         frame_botones.pack(fill="x", pady=(0, 15))
@@ -122,21 +120,16 @@ class InventarioView(tk.Toplevel):
 
         columnas = ("id", "codigo", "nombre", "precio", "stock_minimo", "cantidad", "ubicacion")
 
-        self.tabla_inventario = ttk.Treeview(
-            frame_tabla,
-            columns=columnas,
-            show="headings",
-            height=12
-        )
+        self.tabla_inventario = ttk.Treeview(frame_tabla, columns=columnas, show="headings", height=12)
 
         encabezados = {
             "id": "ID",
-            "codigo": "Código",
+            "codigo": "Codigo",
             "nombre": "Nombre",
             "precio": "Precio",
-            "stock_minimo": "Stock mín.",
+            "stock_minimo": "Stock min.",
             "cantidad": "Cantidad",
-            "ubicacion": "Ubicación"
+            "ubicacion": "Ubicacion"
         }
 
         for columna, texto in encabezados.items():
@@ -144,7 +137,7 @@ class InventarioView(tk.Toplevel):
 
         self.tabla_inventario.column("id", width=60, anchor="center")
         self.tabla_inventario.column("codigo", width=120, anchor="center")
-        self.tabla_inventario.column("nombre", width=260)
+        self.tabla_inventario.column("nombre", width=280)
         self.tabla_inventario.column("precio", width=100, anchor="center")
         self.tabla_inventario.column("stock_minimo", width=100, anchor="center")
         self.tabla_inventario.column("cantidad", width=100, anchor="center")
@@ -171,14 +164,11 @@ class InventarioView(tk.Toplevel):
         )
 
     def cargar_productos(self):
-        self.productos = self.producto_controller.listar_productos()
+        self.productos = self.inventario_controller.listar_inventario()
 
         valores_combo = []
         for producto in self.productos:
-            cantidad = producto[7] if len(producto) > 7 else 0
-            valores_combo.append(
-                f"{producto[0]} - {producto[1]} | Stock: {cantidad}"
-            )
+            valores_combo.append(f"{producto[0]} - {producto[1]} | Stock: {producto[5]}")
 
         self.combo_productos["values"] = valores_combo
 
@@ -186,9 +176,6 @@ class InventarioView(tk.Toplevel):
             self.tabla_inventario.delete(fila)
 
         for producto in self.productos:
-            cantidad = producto[7] if len(producto) > 7 else 0
-            ubicacion = producto[8] if len(producto) > 8 else ""
-
             self.tabla_inventario.insert(
                 "",
                 "end",
@@ -196,16 +183,16 @@ class InventarioView(tk.Toplevel):
                     producto[0],
                     producto[2],
                     producto[1],
-                    producto[3],
+                    f"${float(producto[3]):.2f}",
                     producto[4],
-                    cantidad,
-                    ubicacion
+                    producto[5],
+                    producto[6]
                 )
             )
 
     def obtener_id_producto_seleccionado(self):
         seleccionado = self.combo_productos.get()
-        if not seleccionado:
+        if seleccionado == "":
             return None
         try:
             return int(seleccionado.split(" - ")[0])
@@ -222,44 +209,52 @@ class InventarioView(tk.Toplevel):
         id_producto = self.obtener_id_producto_seleccionado()
         cantidad = self.obtener_cantidad()
         ubicacion = self.entry_ubicacion.get().strip()
+        motivo = self.entry_motivo.get().strip()
 
-        if not id_producto:
+        if id_producto is None:
             messagebox.showwarning("Aviso", "Selecciona un producto.")
             return
 
-        if not cantidad or cantidad <= 0:
+        if cantidad is None or cantidad <= 0:
             messagebox.showwarning("Aviso", "La cantidad debe ser mayor que cero.")
             return
 
         resultado, mensaje = self.inventario_controller.registrar_entrada(
-            id_producto, cantidad, ubicacion
+            id_producto=id_producto,
+            cantidad=cantidad,
+            ubicacion=ubicacion,
+            id_usuario=self.obtener_id_usuario(),
+            motivo=motivo
         )
 
         if resultado:
-            messagebox.showinfo("Éxito", mensaje)
+            messagebox.showinfo("Exito", mensaje)
             self.cargar_productos()
-            self.entry_ubicacion.delete(0, tk.END)
         else:
             messagebox.showerror("Error", mensaje)
 
     def registrar_salida(self):
         id_producto = self.obtener_id_producto_seleccionado()
         cantidad = self.obtener_cantidad()
+        motivo = self.entry_motivo.get().strip()
 
-        if not id_producto:
+        if id_producto is None:
             messagebox.showwarning("Aviso", "Selecciona un producto.")
             return
 
-        if not cantidad or cantidad <= 0:
+        if cantidad is None or cantidad <= 0:
             messagebox.showwarning("Aviso", "La cantidad debe ser mayor que cero.")
             return
 
         resultado, mensaje = self.inventario_controller.registrar_salida(
-            id_producto, cantidad
+            id_producto=id_producto,
+            cantidad=cantidad,
+            id_usuario=self.obtener_id_usuario(),
+            motivo=motivo
         )
 
         if resultado:
-            messagebox.showinfo("Éxito", mensaje)
+            messagebox.showinfo("Exito", mensaje)
             self.cargar_productos()
         else:
             messagebox.showerror("Error", mensaje)
@@ -269,3 +264,10 @@ def abrir_inventario(parent=None, usuario=None):
     ventana = InventarioView(parent, usuario)
     ventana.grab_set()
     return ventana
+
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    root.withdraw()
+    InventarioView(root)
+    root.mainloop()

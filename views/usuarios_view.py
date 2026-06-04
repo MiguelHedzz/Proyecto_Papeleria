@@ -3,13 +3,16 @@
 # ==============================
 
 """
-Pantalla para registrar y administrar usuarios del sistema.
+Pantalla para administrar usuarios.
 
-Campos:
-- Nombre completo.
-- Usuario.
-- Contraseña.
-- Rol (Administrador / Vendedor).
+Permite:
+- Registrar usuario.
+- Listar usuarios.
+- Seleccionar usuario.
+- Actualizar usuario.
+- Cambiar rol.
+- Activar/desactivar usuario.
+- Ocultar contrasenas en la tabla.
 """
 
 import os
@@ -21,7 +24,7 @@ RUTA_PROYECTO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if RUTA_PROYECTO not in sys.path:
     sys.path.insert(0, RUTA_PROYECTO)
 
-from database.conexion import conectar_bd
+from controllers.usuario_controller import UsuarioController
 
 
 class VentanaUsuarios(tk.Toplevel):
@@ -33,222 +36,271 @@ class VentanaUsuarios(tk.Toplevel):
         super().__init__(parent)
 
         self.title("Usuarios")
-        self.geometry("650x550")
-        self.resizable(False, False)
+        self.geometry("900x650")
+        self.minsize(820, 600)
         self.configure(bg="#ecf0f1")
+
         self.usuario_actual = usuario
+        self.usuario_controller = UsuarioController()
+        self.id_usuario_seleccionado = None
 
         self.crear_interfaz()
         self.cargar_usuarios()
 
     def crear_interfaz(self):
-        """
-        Crea todos los elementos visuales de la pantalla.
-        """
+        contenedor = tk.Frame(self, bg="#ecf0f1")
+        contenedor.pack(fill="both", expand=True, padx=25, pady=25)
 
-        contenedor = tk.Frame(self, bg="white", padx=30, pady=30)
-        contenedor.pack(fill="both", expand=True, padx=35, pady=35)
-
-        titulo = tk.Label(
+        tk.Label(
             contenedor,
             text="Usuarios",
-            font=("Segoe UI", 22, "bold"),
-            bg="white",
+            font=("Segoe UI", 24, "bold"),
+            bg="#ecf0f1",
             fg="#2c3e50"
-        )
-        titulo.pack(anchor="w", pady=(0, 20))
+        ).pack(anchor="w", pady=(0, 15))
 
-        # Nombre
-        self.entry_nombre = self.crear_campo(contenedor, "Nombre completo:")
+        card = tk.Frame(contenedor, bg="white", padx=20, pady=20)
+        card.pack(fill="both", expand=True)
 
-        # Usuario
-        self.entry_usuario = self.crear_campo(contenedor, "Nombre de usuario:")
-
-        # Contraseña
-        self.entry_password = self.crear_campo(contenedor, "Contraseña:", password=True)
-
-        # Rol
-        lbl_rol = tk.Label(
-            contenedor,
-            text="Rol:",
+        frame_form = tk.LabelFrame(
+            card,
+            text="Datos del usuario",
+            bg="white",
+            fg="#2c3e50",
             font=("Segoe UI", 11, "bold"),
+            padx=15,
+            pady=15
+        )
+        frame_form.pack(fill="x", pady=(0, 15))
+
+        self.entry_nombre = self.crear_campo(frame_form, "Nombre completo:", 0, 0)
+        self.entry_usuario = self.crear_campo(frame_form, "Usuario:", 0, 2)
+        self.entry_password = self.crear_campo(frame_form, "Contrasena:", 1, 0, password=True)
+
+        tk.Label(
+            frame_form,
+            text="Rol:",
+            font=("Segoe UI", 10, "bold"),
             bg="white",
             fg="#2c3e50"
-        )
-        lbl_rol.pack(anchor="w", pady=(8, 5))
+        ).grid(row=1, column=2, sticky="w", padx=(0, 8), pady=8)
 
         self.combo_rol = ttk.Combobox(
-            contenedor,
+            frame_form,
             values=["Administrador", "Vendedor"],
             state="readonly",
-            font=("Segoe UI", 10)
+            font=("Segoe UI", 10),
+            width=24
         )
-        self.combo_rol.pack(fill="x", ipady=5)
+        self.combo_rol.grid(row=1, column=3, sticky="w", padx=(0, 20), pady=8, ipady=4)
         self.combo_rol.set("Vendedor")
 
-        # Botones
-        frame_botones = tk.Frame(contenedor, bg="white")
-        frame_botones.pack(fill="x", pady=20)
-
-        btn_registrar = tk.Button(
-            frame_botones,
-            text="Registrar",
-            bg="#e67e22",
-            fg="white",
-            font=("Segoe UI", 10, "bold"),
-            relief="flat",
-            cursor="hand2",
-            width=15,
-            height=2,
-            command=self.registrar_usuario
-        )
-        btn_registrar.pack(side="left", padx=(0, 10))
-
-        btn_limpiar = tk.Button(
-            frame_botones,
-            text="Limpiar",
-            bg="#95a5a6",
-            fg="white",
-            font=("Segoe UI", 10, "bold"),
-            relief="flat",
-            cursor="hand2",
-            width=12,
-            height=2,
-            command=self.limpiar_formulario
-        )
-        btn_limpiar.pack(side="left")
-
-        # Tabla de usuarios
-        lbl_lista = tk.Label(
-            contenedor,
-            text="Usuarios registrados",
-            font=("Segoe UI", 12, "bold"),
+        nota = tk.Label(
+            frame_form,
+            text="Nota: al actualizar, deja la contrasena vacia para conservar la actual.",
             bg="white",
-            fg="#2c3e50"
+            fg="#7f8c8d",
+            font=("Segoe UI", 9)
         )
-        lbl_lista.pack(anchor="w", pady=(15, 8))
+        nota.grid(row=2, column=0, columnspan=4, sticky="w", pady=(5, 0))
 
-        columnas = ("id", "nombre", "usuario", "rol")
-        self.tabla_usuarios = ttk.Treeview(contenedor, columns=columnas, show="headings", height=6)
+        frame_botones = tk.Frame(card, bg="white")
+        frame_botones.pack(fill="x", pady=(0, 15))
+
+        self.crear_boton(frame_botones, "Registrar", "#e67e22", self.registrar_usuario).pack(side="left", padx=(0, 10))
+        self.crear_boton(frame_botones, "Actualizar", "#e67e22", self.actualizar_usuario).pack(side="left", padx=(0, 10))
+        self.crear_boton(frame_botones, "Desactivar", "#e74c3c", self.desactivar_usuario).pack(side="left", padx=(0, 10))
+        self.crear_boton(frame_botones, "Activar", "#27ae60", self.activar_usuario).pack(side="left", padx=(0, 10))
+        self.crear_boton(frame_botones, "Limpiar", "#95a5a6", self.limpiar_formulario).pack(side="left", padx=(0, 10))
+
+        frame_tabla = tk.LabelFrame(
+            card,
+            text="Usuarios registrados",
+            bg="white",
+            fg="#2c3e50",
+            font=("Segoe UI", 11, "bold"),
+            padx=10,
+            pady=10
+        )
+        frame_tabla.pack(fill="both", expand=True)
+
+        columnas = ("id", "nombre", "usuario", "rol", "estado")
+        self.tabla_usuarios = ttk.Treeview(frame_tabla, columns=columnas, show="headings", height=10)
 
         self.tabla_usuarios.heading("id", text="ID")
         self.tabla_usuarios.heading("nombre", text="Nombre")
         self.tabla_usuarios.heading("usuario", text="Usuario")
         self.tabla_usuarios.heading("rol", text="Rol")
+        self.tabla_usuarios.heading("estado", text="Estado")
 
-        self.tabla_usuarios.column("id", width=50, anchor="center")
-        self.tabla_usuarios.column("nombre", width=200)
-        self.tabla_usuarios.column("usuario", width=130)
-        self.tabla_usuarios.column("rol", width=130)
+        self.tabla_usuarios.column("id", width=60, anchor="center")
+        self.tabla_usuarios.column("nombre", width=260)
+        self.tabla_usuarios.column("usuario", width=180)
+        self.tabla_usuarios.column("rol", width=150, anchor="center")
+        self.tabla_usuarios.column("estado", width=120, anchor="center")
 
-        self.tabla_usuarios.pack(fill="both", expand=True)
+        self.tabla_usuarios.pack(side="left", fill="both", expand=True)
 
-    def crear_campo(self, parent, texto, password=False):
-        """
-        Crea una etiqueta y una caja de texto.
+        scrollbar = ttk.Scrollbar(frame_tabla, orient="vertical", command=self.tabla_usuarios.yview)
+        scrollbar.pack(side="right", fill="y")
+        self.tabla_usuarios.configure(yscrollcommand=scrollbar.set)
+        self.tabla_usuarios.bind("<<TreeviewSelect>>", self.seleccionar_usuario)
 
-        parent: contenedor.
-        texto: texto de la etiqueta.
-        password: si es True, oculta lo escrito.
-        """
-
-        label = tk.Label(
+    def crear_campo(self, parent, texto, fila, columna, password=False):
+        tk.Label(
             parent,
             text=texto,
-            font=("Segoe UI", 11, "bold"),
+            font=("Segoe UI", 10, "bold"),
             bg="white",
             fg="#2c3e50"
-        )
-        label.pack(anchor="w", pady=(8, 5))
+        ).grid(row=fila, column=columna, sticky="w", padx=(0, 8), pady=8)
 
         entry = tk.Entry(
             parent,
             font=("Segoe UI", 10),
             relief="solid",
             bd=1,
-            show="*" if password else ""
+            show="*" if password else "",
+            width=28
         )
-        entry.pack(fill="x", ipady=5)
+        entry.grid(row=fila, column=columna + 1, sticky="w", padx=(0, 20), pady=8, ipady=4)
         return entry
 
-    def registrar_usuario(self):
-        """
-        Registra un usuario nuevo en la base de datos.
-        """
+    def crear_boton(self, parent, texto, color, comando):
+        return tk.Button(
+            parent,
+            text=texto,
+            bg=color,
+            fg="white",
+            font=("Segoe UI", 10, "bold"),
+            relief="flat",
+            cursor="hand2",
+            width=14,
+            height=2,
+            command=comando
+        )
 
+    def cargar_usuarios(self):
+        for fila in self.tabla_usuarios.get_children():
+            self.tabla_usuarios.delete(fila)
+
+        usuarios = self.usuario_controller.listar_usuarios()
+
+        for usuario in usuarios:
+            estado = "Activo" if int(usuario[4]) == 1 else "Inactivo"
+            self.tabla_usuarios.insert(
+                "",
+                "end",
+                values=(usuario[0], usuario[1], usuario[2], usuario[3], estado)
+            )
+
+    def registrar_usuario(self):
         nombre = self.entry_nombre.get().strip()
         usuario = self.entry_usuario.get().strip()
         password = self.entry_password.get().strip()
         rol = self.combo_rol.get().strip()
 
-        if nombre == "" or usuario == "" or password == "" or rol == "":
-            messagebox.showwarning("Campos vacíos", "Debes llenar todos los campos.")
-            return
+        resultado, mensaje = self.usuario_controller.registrar_usuario(
+            nombre=nombre,
+            usuario=usuario,
+            password=password,
+            rol=rol
+        )
 
-        try:
-            conexion = conectar_bd()
-            cursor = conexion.cursor()
-
-            cursor.execute("""
-                INSERT INTO usuario (nombre, usuario, password, rol)
-                VALUES (?, ?, ?, ?)
-            """, (nombre, usuario, password, rol))
-
-            conexion.commit()
-            conexion.close()
-
-            messagebox.showinfo("Éxito", "Usuario registrado correctamente.")
+        if resultado:
+            messagebox.showinfo("Exito", mensaje)
             self.limpiar_formulario()
             self.cargar_usuarios()
+        else:
+            messagebox.showerror("Error", mensaje)
 
-        except Exception as error:
-            if "UNIQUE" in str(error):
-                messagebox.showerror("Usuario duplicado", "Ese nombre de usuario ya existe.")
-            else:
-                messagebox.showerror("Error", f"No se pudo registrar el usuario.\n\nDetalle: {error}")
+    def seleccionar_usuario(self, event):
+        seleccion = self.tabla_usuarios.selection()
+        if not seleccion:
+            return
 
-    def cargar_usuarios(self):
-        """
-        Muestra los usuarios registrados en la tabla.
-        """
+        valores = self.tabla_usuarios.item(seleccion[0], "values")
+        self.id_usuario_seleccionado = valores[0]
 
-        for fila in self.tabla_usuarios.get_children():
-            self.tabla_usuarios.delete(fila)
+        self.entry_nombre.delete(0, tk.END)
+        self.entry_nombre.insert(0, valores[1])
 
-        try:
-            conexion = conectar_bd()
-            cursor = conexion.cursor()
+        self.entry_usuario.delete(0, tk.END)
+        self.entry_usuario.insert(0, valores[2])
 
-            cursor.execute("""
-                SELECT id_usuario, nombre, usuario, rol
-                FROM usuario
-                ORDER BY id_usuario ASC
-            """)
+        self.entry_password.delete(0, tk.END)
+        self.combo_rol.set(valores[3])
 
-            usuarios = cursor.fetchall()
-            conexion.close()
+    def actualizar_usuario(self):
+        if self.id_usuario_seleccionado is None:
+            messagebox.showwarning("Aviso", "Selecciona un usuario de la tabla.")
+            return
 
-            for usuario in usuarios:
-                self.tabla_usuarios.insert("", "end", values=usuario)
+        nombre = self.entry_nombre.get().strip()
+        usuario = self.entry_usuario.get().strip()
+        nueva_password = self.entry_password.get().strip()
+        rol = self.combo_rol.get().strip()
 
-        except Exception as error:
-            messagebox.showerror("Error", f"No se pudieron cargar los usuarios.\n\nDetalle: {error}")
+        resultado, mensaje = self.usuario_controller.actualizar_usuario(
+            id_usuario=self.id_usuario_seleccionado,
+            nombre=nombre,
+            usuario=usuario,
+            rol=rol,
+            nueva_password=nueva_password if nueva_password else None
+        )
+
+        if resultado:
+            messagebox.showinfo("Exito", mensaje)
+            self.limpiar_formulario()
+            self.cargar_usuarios()
+        else:
+            messagebox.showerror("Error", mensaje)
+
+    def desactivar_usuario(self):
+        if self.id_usuario_seleccionado is None:
+            messagebox.showwarning("Aviso", "Selecciona un usuario de la tabla.")
+            return
+
+        confirmar = messagebox.askyesno("Confirmar", "¿Seguro que deseas desactivar este usuario?")
+        if not confirmar:
+            return
+
+        resultado, mensaje = self.usuario_controller.desactivar_usuario(self.id_usuario_seleccionado)
+
+        if resultado:
+            messagebox.showinfo("Exito", mensaje)
+            self.limpiar_formulario()
+            self.cargar_usuarios()
+        else:
+            messagebox.showerror("Error", mensaje)
+
+    def activar_usuario(self):
+        if self.id_usuario_seleccionado is None:
+            messagebox.showwarning("Aviso", "Selecciona un usuario de la tabla.")
+            return
+
+        resultado, mensaje = self.usuario_controller.activar_usuario(self.id_usuario_seleccionado)
+
+        if resultado:
+            messagebox.showinfo("Exito", mensaje)
+            self.limpiar_formulario()
+            self.cargar_usuarios()
+        else:
+            messagebox.showerror("Error", mensaje)
 
     def limpiar_formulario(self):
-        """
-        Limpia los campos del formulario.
-        """
-
+        self.id_usuario_seleccionado = None
         self.entry_nombre.delete(0, tk.END)
         self.entry_usuario.delete(0, tk.END)
         self.entry_password.delete(0, tk.END)
         self.combo_rol.set("Vendedor")
 
+        seleccion = self.tabla_usuarios.selection()
+        if seleccion:
+            self.tabla_usuarios.selection_remove(seleccion)
+
 
 def abrir_usuarios(parent=None, usuario=None):
-    """
-    Abre la ventana de usuarios.
-    """
     ventana = VentanaUsuarios(parent, usuario)
     ventana.grab_set()
     return ventana

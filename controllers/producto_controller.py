@@ -3,17 +3,15 @@
 # ==============================
 
 """
-Este controlador maneja las operaciones relacionadas con productos.
+Controlador de productos.
 
-Permite:
+Maneja:
 - Registrar productos.
-- Listar productos.
-- Buscar productos por código.
-- Buscar productos por ID.
+- Listar productos con inventario, categoria y proveedor.
+- Buscar productos.
 - Actualizar productos.
-- Eliminar productos.
-- Crear inventario inicial.
-- Actualizar inventario relacionado con el producto.
+- Actualizar inventario relacionado.
+- Eliminar productos de forma segura.
 """
 
 import sqlite3
@@ -22,15 +20,8 @@ from database.conexion import conectar_bd
 
 class ProductoController:
     """
-    Controlador de productos.
-
-    Este archivo funciona como puente entre la base de datos
-    y las futuras pantallas del sistema.
+    Controlador para administrar productos del catalogo.
     """
-
-    # ==============================
-    # REGISTRAR PRODUCTO
-    # ==============================
 
     def registrar_producto(
         self,
@@ -44,39 +35,36 @@ class ProductoController:
         ubicacion=""
     ):
         """
-        Registra un nuevo producto en la base de datos.
-
-        También crea su inventario inicial.
-
-        Parámetros:
-        nombre: Nombre del producto.
-        codigo: Código único del producto.
-        precio: Precio de venta.
-        stock_minimo: Cantidad mínima antes de alerta.
-        id_categoria: Categoría del producto.
-        id_proveedor: Proveedor del producto.
-        cantidad_inicial: Cantidad inicial en inventario.
-        ubicacion: Lugar físico donde se encuentra.
+        Registra un producto y crea su inventario inicial.
         """
 
+        nombre = str(nombre).strip()
+        codigo = str(codigo).strip()
+        ubicacion = str(ubicacion).strip()
+
         if nombre == "" or codigo == "":
-            return False, "El nombre y el código son obligatorios."
+            return False, "El nombre y el codigo son obligatorios."
 
         try:
             precio = float(precio)
             stock_minimo = int(stock_minimo)
             cantidad_inicial = int(cantidad_inicial)
-        except ValueError:
-            return False, "Precio, stock mínimo y cantidad inicial deben ser numéricos."
+        except (TypeError, ValueError):
+            return False, "Precio, stock minimo y cantidad inicial deben ser numericos."
 
         if precio <= 0:
             return False, "El precio debe ser mayor que cero."
 
         if stock_minimo < 0:
-            return False, "El stock mínimo no puede ser negativo."
+            return False, "El stock minimo no puede ser negativo."
 
         if cantidad_inicial < 0:
             return False, "La cantidad inicial no puede ser negativa."
+
+        id_categoria = self.normalizar_id(id_categoria)
+        id_proveedor = self.normalizar_id(id_proveedor)
+
+        conexion = None
 
         try:
             conexion = conectar_bd()
@@ -89,9 +77,10 @@ class ProductoController:
                     precio,
                     stock_minimo,
                     id_categoria,
-                    id_proveedor
+                    id_proveedor,
+                    activo
                 )
-                VALUES (?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, 1)
             """, (
                 nombre,
                 codigo,
@@ -116,33 +105,69 @@ class ProductoController:
                 ubicacion
             ))
 
-            conexion.commit()
-            conexion.close()
+            if cantidad_inicial > 0:
+                cursor.execute("""
+                    INSERT INTO movimiento_inventario (
+                        id_producto,
+                        tipo_movimiento,
+                        cantidad,
+                        fecha,
+                        id_usuario,
+                        motivo
+                    )
+                    VALUES (?, ?, ?, CURRENT_TIMESTAMP, NULL, ?)
+                """, (
+                    id_producto,
+                    "ENTRADA",
+                    cantidad_inicial,
+                    "Inventario inicial"
+                ))
 
+            conexion.commit()
             return True, "Producto registrado correctamente."
 
         except sqlite3.IntegrityError:
-            return False, "El código del producto ya existe."
+            if conexion:
+                conexion.rollback()
+            return False, "El codigo del producto ya existe."
 
         except sqlite3.Error as error:
+            if conexion:
+                conexion.rollback()
             return False, f"Error al registrar producto: {error}"
 
-    # ==============================
-    # LISTAR PRODUCTOS
-    # ==============================
+        finally:
+            if conexion:
+                conexion.close()
 
-    def listar_productos(self):
+    def listar_productos(self, solo_activos=False):
         """
-        Lista todos los productos registrados.
+        Lista productos con informacion de inventario, categoria y proveedor.
 
-        Incluye información del inventario si existe.
+        Estructura:
+        0 id_producto
+        1 nombre
+        2 codigo
+        3 precio
+        4 stock_minimo
+        5 id_categoria
+        6 id_proveedor
+        7 cantidad_actual
+        8 ubicacion
+        9 categoria_nombre
+        10 proveedor_nombre
+        11 activo
         """
+
+        conexion = None
 
         try:
             conexion = conectar_bd()
             cursor = conexion.cursor()
 
-            cursor.execute("""
+            filtro = "WHERE p.activo = 1" if solo_activos else ""
+
+            cursor.execute(f"""
                 SELECT
                     p.id_producto,
                     p.nombre,
@@ -152,49 +177,49 @@ class ProductoController:
                     p.id_categoria,
                     p.id_proveedor,
                     IFNULL(i.cantidad_actual, 0) AS cantidad_actual,
-                    IFNULL(i.ubicacion, '') AS ubicacion
+                    IFNULL(i.ubicacion, '') AS ubicacion,
+                    IFNULL(c.nombre, '') AS categoria_nombre,
+                    IFNULL(pr.nombre, '') AS proveedor_nombre,
+                    IFNULL(p.activo, 1) AS activo
                 FROM producto p
                 LEFT JOIN inventario i
-                ON p.id_producto = i.id_producto
+                    ON p.id_producto = i.id_producto
+                LEFT JOIN categoria c
+                    ON p.id_categoria = c.id_categoria
+                LEFT JOIN proveedor pr
+                    ON p.id_proveedor = pr.id_proveedor
+                {filtro}
                 ORDER BY p.nombre ASC
             """)
 
-            productos = cursor.fetchall()
-            conexion.close()
-
-            return productos
+            return cursor.fetchall()
 
         except sqlite3.Error as error:
             print(f"Error al listar productos: {error}")
             return []
 
-    # ==============================
-    # OBTENER PRODUCTOS
-    # ==============================
+        finally:
+            if conexion:
+                conexion.close()
 
     def obtener_productos(self):
         """
-        Método alternativo para listar productos.
-
-        Se deja para compatibilidad con otros archivos del proyecto.
+        Alias para compatibilidad.
         """
 
         return self.listar_productos()
 
-    # ==============================
-    # BUSCAR POR CÓDIGO
-    # ==============================
-
     def buscar_por_codigo(self, codigo):
         """
-        Busca un producto por su código.
-
-        Parámetro:
-        codigo: Código único del producto.
+        Busca un producto por codigo.
         """
+
+        codigo = str(codigo).strip()
 
         if codigo == "":
             return None
+
+        conexion = None
 
         try:
             conexion = conectar_bd()
@@ -210,37 +235,40 @@ class ProductoController:
                     p.id_categoria,
                     p.id_proveedor,
                     IFNULL(i.cantidad_actual, 0) AS cantidad_actual,
-                    IFNULL(i.ubicacion, '') AS ubicacion
+                    IFNULL(i.ubicacion, '') AS ubicacion,
+                    IFNULL(c.nombre, '') AS categoria_nombre,
+                    IFNULL(pr.nombre, '') AS proveedor_nombre,
+                    IFNULL(p.activo, 1) AS activo
                 FROM producto p
                 LEFT JOIN inventario i
-                ON p.id_producto = i.id_producto
+                    ON p.id_producto = i.id_producto
+                LEFT JOIN categoria c
+                    ON p.id_categoria = c.id_categoria
+                LEFT JOIN proveedor pr
+                    ON p.id_proveedor = pr.id_proveedor
                 WHERE p.codigo = ?
             """, (codigo,))
 
-            producto = cursor.fetchone()
-            conexion.close()
-
-            return producto
+            return cursor.fetchone()
 
         except sqlite3.Error as error:
-            print(f"Error al buscar producto por código: {error}")
+            print(f"Error al buscar producto por codigo: {error}")
             return None
 
-    # ==============================
-    # BUSCAR POR ID
-    # ==============================
+        finally:
+            if conexion:
+                conexion.close()
 
     def buscar_por_id(self, id_producto):
         """
-        Busca un producto por su ID.
-
-        Este método es importante porque puede ser usado por ventas,
-        inventario, reportes o pantallas del sistema.
+        Busca un producto por ID.
         """
 
         if id_producto is None:
             return None
 
+        conexion = None
+
         try:
             conexion = conectar_bd()
             cursor = conexion.cursor()
@@ -255,38 +283,36 @@ class ProductoController:
                     p.id_categoria,
                     p.id_proveedor,
                     IFNULL(i.cantidad_actual, 0) AS cantidad_actual,
-                    IFNULL(i.ubicacion, '') AS ubicacion
+                    IFNULL(i.ubicacion, '') AS ubicacion,
+                    IFNULL(c.nombre, '') AS categoria_nombre,
+                    IFNULL(pr.nombre, '') AS proveedor_nombre,
+                    IFNULL(p.activo, 1) AS activo
                 FROM producto p
                 LEFT JOIN inventario i
-                ON p.id_producto = i.id_producto
+                    ON p.id_producto = i.id_producto
+                LEFT JOIN categoria c
+                    ON p.id_categoria = c.id_categoria
+                LEFT JOIN proveedor pr
+                    ON p.id_proveedor = pr.id_proveedor
                 WHERE p.id_producto = ?
             """, (id_producto,))
 
-            producto = cursor.fetchone()
-            conexion.close()
-
-            return producto
+            return cursor.fetchone()
 
         except sqlite3.Error as error:
             print(f"Error al buscar producto por ID: {error}")
             return None
 
-    # ==============================
-    # OBTENER PRODUCTO POR ID
-    # ==============================
+        finally:
+            if conexion:
+                conexion.close()
 
     def obtener_producto_por_id(self, id_producto):
         """
-        Método alternativo para buscar producto por ID.
-
-        Se deja para no romper archivos que usen este nombre.
+        Alias para compatibilidad.
         """
 
         return self.buscar_por_id(id_producto)
-
-    # ==============================
-    # ACTUALIZAR PRODUCTO
-    # ==============================
 
     def actualizar_producto(
         self,
@@ -299,29 +325,34 @@ class ProductoController:
         id_proveedor=None
     ):
         """
-        Actualiza los datos principales de un producto.
-
-        No actualiza cantidad de inventario.
-        La cantidad se maneja desde inventario.
+        Actualiza datos principales de un producto.
         """
 
         if id_producto is None:
             return False, "Debe seleccionar un producto."
 
+        nombre = str(nombre).strip()
+        codigo = str(codigo).strip()
+
         if nombre == "" or codigo == "":
-            return False, "El nombre y el código son obligatorios."
+            return False, "El nombre y el codigo son obligatorios."
 
         try:
             precio = float(precio)
             stock_minimo = int(stock_minimo)
-        except ValueError:
-            return False, "Precio y stock mínimo deben ser numéricos."
+        except (TypeError, ValueError):
+            return False, "Precio y stock minimo deben ser numericos."
 
         if precio <= 0:
             return False, "El precio debe ser mayor que cero."
 
         if stock_minimo < 0:
-            return False, "El stock mínimo no puede ser negativo."
+            return False, "El stock minimo no puede ser negativo."
+
+        id_categoria = self.normalizar_id(id_categoria)
+        id_proveedor = self.normalizar_id(id_proveedor)
+
+        conexion = None
 
         try:
             conexion = conectar_bd()
@@ -348,23 +379,25 @@ class ProductoController:
             ))
 
             conexion.commit()
-            conexion.close()
-
             return True, "Producto actualizado correctamente."
 
         except sqlite3.IntegrityError:
-            return False, "El código del producto ya existe."
+            if conexion:
+                conexion.rollback()
+            return False, "El codigo del producto ya existe."
 
         except sqlite3.Error as error:
+            if conexion:
+                conexion.rollback()
             return False, f"Error al actualizar producto: {error}"
 
-    # ==============================
-    # ACTUALIZAR INVENTARIO
-    # ==============================
+        finally:
+            if conexion:
+                conexion.close()
 
     def actualizar_inventario(self, id_producto, nueva_cantidad, nueva_ubicacion=""):
         """
-        Actualiza la cantidad y ubicación del producto en inventario.
+        Actualiza cantidad y ubicacion del inventario de un producto.
         """
 
         if id_producto is None:
@@ -372,18 +405,21 @@ class ProductoController:
 
         try:
             nueva_cantidad = int(nueva_cantidad)
-        except ValueError:
-            return False, "La cantidad debe ser un número entero."
+        except (TypeError, ValueError):
+            return False, "La cantidad debe ser numerica."
 
         if nueva_cantidad < 0:
             return False, "La cantidad no puede ser negativa."
+
+        nueva_ubicacion = str(nueva_ubicacion).strip()
+        conexion = None
 
         try:
             conexion = conectar_bd()
             cursor = conexion.cursor()
 
             cursor.execute("""
-                SELECT id_inventario
+                SELECT cantidad_actual
                 FROM inventario
                 WHERE id_producto = ?
             """, (id_producto,))
@@ -391,15 +427,33 @@ class ProductoController:
             inventario = cursor.fetchone()
 
             if inventario:
+                cantidad_anterior = int(inventario["cantidad_actual"])
+
                 cursor.execute("""
                     UPDATE inventario
                     SET cantidad_actual = ?, ubicacion = ?
                     WHERE id_producto = ?
-                """, (
-                    nueva_cantidad,
-                    nueva_ubicacion,
-                    id_producto
-                ))
+                """, (nueva_cantidad, nueva_ubicacion, id_producto))
+
+                diferencia = nueva_cantidad - cantidad_anterior
+                if diferencia != 0:
+                    tipo = "ENTRADA" if diferencia > 0 else "SALIDA"
+                    cursor.execute("""
+                        INSERT INTO movimiento_inventario (
+                            id_producto,
+                            tipo_movimiento,
+                            cantidad,
+                            fecha,
+                            id_usuario,
+                            motivo
+                        )
+                        VALUES (?, ?, ?, CURRENT_TIMESTAMP, NULL, ?)
+                    """, (
+                        id_producto,
+                        tipo,
+                        abs(diferencia),
+                        "Ajuste desde productos"
+                    ))
             else:
                 cursor.execute("""
                     INSERT INTO inventario (
@@ -408,147 +462,137 @@ class ProductoController:
                         ubicacion
                     )
                     VALUES (?, ?, ?)
-                """, (
-                    id_producto,
-                    nueva_cantidad,
-                    nueva_ubicacion
-                ))
+                """, (id_producto, nueva_cantidad, nueva_ubicacion))
+
+                if nueva_cantidad > 0:
+                    cursor.execute("""
+                        INSERT INTO movimiento_inventario (
+                            id_producto,
+                            tipo_movimiento,
+                            cantidad,
+                            fecha,
+                            id_usuario,
+                            motivo
+                        )
+                        VALUES (?, ?, ?, CURRENT_TIMESTAMP, NULL, ?)
+                    """, (
+                        id_producto,
+                        "ENTRADA",
+                        nueva_cantidad,
+                        "Inventario creado desde productos"
+                    ))
 
             conexion.commit()
-            conexion.close()
-
             return True, "Inventario actualizado correctamente."
 
         except sqlite3.Error as error:
+            if conexion:
+                conexion.rollback()
             return False, f"Error al actualizar inventario: {error}"
 
-    # ==============================
-    # ELIMINAR PRODUCTO
-    # ==============================
+        finally:
+            if conexion:
+                conexion.close()
 
     def eliminar_producto(self, id_producto):
         """
-        Elimina un producto.
-
-        Primero elimina registros relacionados en alerta e inventario.
-        Después elimina el producto.
+        Elimina un producto solo si no tiene ventas relacionadas.
         """
 
         if id_producto is None:
             return False, "Debe seleccionar un producto."
 
+        conexion = None
+
         try:
             conexion = conectar_bd()
             cursor = conexion.cursor()
 
             cursor.execute("""
-                DELETE FROM alerta
+                SELECT COUNT(*) AS total
+                FROM detalle_venta
                 WHERE id_producto = ?
             """, (id_producto,))
 
-            cursor.execute("""
-                DELETE FROM inventario
-                WHERE id_producto = ?
-            """, (id_producto,))
+            ventas = cursor.fetchone()["total"]
 
-            cursor.execute("""
-                DELETE FROM detalle_venta
-                WHERE id_producto = ?
-            """, (id_producto,))
+            if ventas > 0:
+                return False, (
+                    "No se puede eliminar este producto porque ya tiene ventas registradas. "
+                    "Puedes dejarlo sin uso o cambiar sus datos, pero no borrarlo."
+                )
 
-            cursor.execute("""
-                DELETE FROM producto
-                WHERE id_producto = ?
-            """, (id_producto,))
+            cursor.execute("DELETE FROM inventario WHERE id_producto = ?", (id_producto,))
+            cursor.execute("DELETE FROM alerta WHERE id_producto = ?", (id_producto,))
+            cursor.execute("DELETE FROM producto WHERE id_producto = ?", (id_producto,))
 
             conexion.commit()
-            conexion.close()
-
             return True, "Producto eliminado correctamente."
 
         except sqlite3.Error as error:
+            if conexion:
+                conexion.rollback()
             return False, f"Error al eliminar producto: {error}"
 
-    # ==============================
-    # BUSCAR PRODUCTOS POR NOMBRE
-    # ==============================
+        finally:
+            if conexion:
+                conexion.close()
 
-    def buscar_por_nombre(self, nombre):
+    def desactivar_producto(self, id_producto):
         """
-        Busca productos que coincidan parcialmente con el nombre.
+        Marca producto como inactivo.
         """
+
+        return self.cambiar_estado_producto(id_producto, 0)
+
+    def activar_producto(self, id_producto):
+        """
+        Marca producto como activo.
+        """
+
+        return self.cambiar_estado_producto(id_producto, 1)
+
+    def cambiar_estado_producto(self, id_producto, activo):
+        """
+        Cambia el estado activo/inactivo del producto.
+        """
+
+        conexion = None
 
         try:
             conexion = conectar_bd()
             cursor = conexion.cursor()
 
             cursor.execute("""
-                SELECT
-                    p.id_producto,
-                    p.nombre,
-                    p.codigo,
-                    p.precio,
-                    p.stock_minimo,
-                    IFNULL(i.cantidad_actual, 0) AS cantidad_actual,
-                    IFNULL(i.ubicacion, '') AS ubicacion
-                FROM producto p
-                LEFT JOIN inventario i
-                ON p.id_producto = i.id_producto
-                WHERE p.nombre LIKE ?
-                ORDER BY p.nombre ASC
-            """, (f"%{nombre}%",))
+                UPDATE producto
+                SET activo = ?
+                WHERE id_producto = ?
+            """, (activo, id_producto))
 
-            productos = cursor.fetchall()
-            conexion.close()
-
-            return productos
+            conexion.commit()
+            return True, "Estado del producto actualizado correctamente."
 
         except sqlite3.Error as error:
-            print(f"Error al buscar productos por nombre: {error}")
-            return []
+            if conexion:
+                conexion.rollback()
+            return False, f"Error al cambiar estado del producto: {error}"
 
-    # ==============================
-    # CONTAR PRODUCTOS
-    # ==============================
+        finally:
+            if conexion:
+                conexion.close()
 
-    def contar_productos(self):
+    def normalizar_id(self, valor):
         """
-        Cuenta cuántos productos hay registrados.
+        Convierte valores vacios en None y valores validos en int.
         """
+
+        if valor is None:
+            return None
+
+        if str(valor).strip() == "":
+            return None
 
         try:
-            conexion = conectar_bd()
-            cursor = conexion.cursor()
-
-            cursor.execute("""
-                SELECT COUNT(*)
-                FROM producto
-            """)
-
-            resultado = cursor.fetchone()
-            conexion.close()
-
-            if resultado:
-                return resultado[0]
-
-            return 0
-
-        except sqlite3.Error as error:
-            print(f"Error al contar productos: {error}")
-            return 0
-
-
-# ==============================
-# PRUEBA DEL CONTROLADOR
-# ==============================
-
-if __name__ == "__main__":
-    controlador = ProductoController()
-
-    print("Productos registrados:")
-    productos = controlador.listar_productos()
-
-    for producto in productos:
-        print(producto)
-
-    print("Total de productos:", controlador.contar_productos())
+            return int(valor)
+        except (TypeError, ValueError):
+            return None

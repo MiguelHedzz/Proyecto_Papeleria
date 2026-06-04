@@ -3,30 +3,28 @@
 # ==============================
 
 """
-Vista para probar reportes.
+Vista independiente de reportes.
 
-Muestra:
-- Resumen general.
-- Inventario.
+Incluye:
 - Stock bajo.
 - Ventas.
 - Productos.
-
-Ejecutar:
-python -m views.reportes_view
+- Movimientos de inventario.
+- Productos mas vendidos.
+- Exportacion basica a CSV.
 """
 
 import os
 import sys
-import sqlite3
+import csv
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
 
 RUTA_PROYECTO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if RUTA_PROYECTO not in sys.path:
     sys.path.insert(0, RUTA_PROYECTO)
 
-from database.conexion import conectar_bd
+from services.reporte_service import ReporteService
 
 
 class VentanaReportes(tk.Toplevel):
@@ -38,9 +36,11 @@ class VentanaReportes(tk.Toplevel):
         super().__init__(parent)
 
         self.title("Reportes del Sistema")
-        self.geometry("1100x680")
-        self.minsize(980, 620)
+        self.geometry("1150x700")
+        self.minsize(1020, 620)
         self.configure(bg="#ecf0f1")
+
+        self.reporte_service = ReporteService()
 
         self.crear_interfaz()
         self.cargar_datos()
@@ -60,196 +60,215 @@ class VentanaReportes(tk.Toplevel):
         card = tk.Frame(contenedor, bg="white", padx=20, pady=20)
         card.pack(fill="both", expand=True)
 
+        frame_botones = tk.Frame(card, bg="white")
+        frame_botones.pack(fill="x", pady=(0, 15))
+
+        self.crear_boton(frame_botones, "Exportar Stock Bajo CSV", "#3498db", lambda: self.exportar_csv("stock_bajo")).pack(side="left", padx=(0, 10))
+        self.crear_boton(frame_botones, "Exportar Ventas CSV", "#3498db", lambda: self.exportar_csv("ventas")).pack(side="left", padx=(0, 10))
+        self.crear_boton(frame_botones, "Exportar Productos CSV", "#3498db", lambda: self.exportar_csv("productos")).pack(side="left", padx=(0, 10))
+        self.crear_boton(frame_botones, "Actualizar", "#95a5a6", self.cargar_datos).pack(side="left", padx=(0, 10))
+
         self.frame_resumen = tk.Frame(card, bg="white")
         self.frame_resumen.pack(fill="x", pady=(0, 15))
-
-        tk.Button(
-            card,
-            text="Actualizar reportes",
-            bg="#e67e22",
-            fg="white",
-            font=("Segoe UI", 10, "bold"),
-            relief="flat",
-            cursor="hand2",
-            width=18,
-            height=2,
-            command=self.cargar_datos
-        ).pack(anchor="w", pady=(0, 15))
 
         self.notebook = ttk.Notebook(card)
         self.notebook.pack(fill="both", expand=True)
 
-        self.tab_inventario = tk.Frame(self.notebook, bg="white")
         self.tab_stock = tk.Frame(self.notebook, bg="white")
         self.tab_ventas = tk.Frame(self.notebook, bg="white")
         self.tab_productos = tk.Frame(self.notebook, bg="white")
+        self.tab_movimientos = tk.Frame(self.notebook, bg="white")
+        self.tab_mas_vendidos = tk.Frame(self.notebook, bg="white")
 
-        self.notebook.add(self.tab_inventario, text="Inventario")
         self.notebook.add(self.tab_stock, text="Stock bajo")
         self.notebook.add(self.tab_ventas, text="Ventas")
         self.notebook.add(self.tab_productos, text="Productos")
+        self.notebook.add(self.tab_movimientos, text="Movimientos")
+        self.notebook.add(self.tab_mas_vendidos, text="Mas vendidos")
 
-    def consulta(self, sql, parametros=()):
-        try:
-            conexion = conectar_bd()
-            cursor = conexion.cursor()
-            cursor.execute(sql, parametros)
-            datos = cursor.fetchall()
-            conexion.close()
-            return datos
-        except sqlite3.Error as error:
-            messagebox.showerror("Error", f"No se pudo consultar la base de datos.\n\nDetalle: {error}")
-            return []
+    def crear_boton(self, parent, texto, color, comando):
+        return tk.Button(
+            parent,
+            text=texto,
+            bg=color,
+            fg="white",
+            font=("Segoe UI", 10, "bold"),
+            relief="flat",
+            cursor="hand2",
+            height=2,
+            command=comando
+        )
 
     def limpiar_frame(self, frame):
         for widget in frame.winfo_children():
             widget.destroy()
 
+    def obtener_valor(self, fila, clave, indice, default=""):
+        try:
+            return fila[clave]
+        except Exception:
+            try:
+                return fila[indice]
+            except Exception:
+                return default
+
     def cargar_datos(self):
         self.cargar_resumen()
-        self.cargar_inventario()
         self.cargar_stock_bajo()
         self.cargar_ventas()
         self.cargar_productos()
+        self.cargar_movimientos()
+        self.cargar_productos_mas_vendidos()
 
     def cargar_resumen(self):
         self.limpiar_frame(self.frame_resumen)
-
-        total_productos = self.consulta("SELECT COUNT(*) FROM producto")[0][0]
-        total_ventas = self.consulta("SELECT COUNT(*) FROM venta")[0][0]
-        total_ingresos = self.consulta("SELECT IFNULL(SUM(total), 0) FROM venta")[0][0]
-        stock_bajo = self.consulta("""
-            SELECT COUNT(*)
-            FROM producto p
-            LEFT JOIN inventario i ON p.id_producto = i.id_producto
-            WHERE IFNULL(i.cantidad_actual, 0) <= p.stock_minimo
-        """)[0][0]
+        resumen = self.reporte_service.resumen_general()
 
         tarjetas = [
-            ("Productos", total_productos, "#e67e22"),
-            ("Ventas", total_ventas, "#27ae60"),
-            ("Ingresos", f"${float(total_ingresos):.2f}", "#2c3e50"),
-            ("Stock bajo", stock_bajo, "#e74c3c"),
+            ("Productos", resumen.get("total_productos", 0), "#e67e22"),
+            ("Ventas", resumen.get("total_ventas", 0), "#27ae60"),
+            ("Ingresos", f"${float(resumen.get('total_ingresos', 0)):.2f}", "#2c3e50"),
+            ("Stock bajo", resumen.get("productos_stock_bajo", 0), "#e74c3c"),
         ]
 
         for titulo, valor, color in tarjetas:
             tarjeta = tk.Frame(self.frame_resumen, bg="#f8f9fa", relief="solid", bd=1, padx=15, pady=12)
             tarjeta.pack(side="left", fill="x", expand=True, padx=(0, 12))
-
             tk.Label(tarjeta, text=titulo, bg="#f8f9fa", fg="#2c3e50", font=("Segoe UI", 11, "bold")).pack(anchor="w")
             tk.Label(tarjeta, text=str(valor), bg="#f8f9fa", fg=color, font=("Segoe UI", 18, "bold")).pack(anchor="w", pady=(5, 0))
 
     def crear_tabla(self, parent, columnas, encabezados, anchos, datos):
         self.limpiar_frame(parent)
-
         tabla = ttk.Treeview(parent, columns=columnas, show="headings", height=13)
 
         for columna in columnas:
             tabla.heading(columna, text=encabezados.get(columna, columna))
-            tabla.column(columna, width=anchos.get(columna, 120), anchor="center" if columna in ("id", "codigo", "cantidad", "total") else "w")
+            anchor = "center" if columna in ("id", "codigo", "cantidad", "total", "stock_minimo", "precio") else "w"
+            tabla.column(columna, width=anchos.get(columna, 120), anchor=anchor)
 
         tabla.pack(side="left", fill="both", expand=True, padx=10, pady=10)
-
         scrollbar = ttk.Scrollbar(parent, orient="vertical", command=tabla.yview)
         scrollbar.pack(side="right", fill="y", pady=10)
-
         tabla.configure(yscrollcommand=scrollbar.set)
 
         for fila in datos:
             tabla.insert("", "end", values=fila)
 
-    def cargar_inventario(self):
-        datos = self.consulta("""
-            SELECT
-                p.id_producto,
-                p.codigo,
-                p.nombre,
-                p.precio,
-                p.stock_minimo,
-                IFNULL(i.cantidad_actual, 0),
-                IFNULL(i.ubicacion, '')
-            FROM producto p
-            LEFT JOIN inventario i ON p.id_producto = i.id_producto
-            ORDER BY p.nombre ASC
-        """)
-
-        columnas = ("id", "codigo", "nombre", "precio", "stock_minimo", "cantidad", "ubicacion")
-        encabezados = {
-            "id": "ID",
-            "codigo": "Código",
-            "nombre": "Nombre",
-            "precio": "Precio",
-            "stock_minimo": "Stock mín.",
-            "cantidad": "Cantidad",
-            "ubicacion": "Ubicación"
-        }
-        anchos = {"id": 60, "codigo": 120, "nombre": 280, "precio": 100, "stock_minimo": 100, "cantidad": 100, "ubicacion": 180}
-
-        self.crear_tabla(self.tab_inventario, columnas, encabezados, anchos, datos)
+        return tabla
 
     def cargar_stock_bajo(self):
-        datos = self.consulta("""
-            SELECT
-                p.id_producto,
-                p.codigo,
-                p.nombre,
-                p.stock_minimo,
-                IFNULL(i.cantidad_actual, 0),
-                IFNULL(i.ubicacion, '')
-            FROM producto p
-            LEFT JOIN inventario i ON p.id_producto = i.id_producto
-            WHERE IFNULL(i.cantidad_actual, 0) <= p.stock_minimo
-            ORDER BY p.nombre ASC
-        """)
+        datos = []
+        for fila in self.reporte_service.reporte_stock_bajo():
+            datos.append((
+                self.obtener_valor(fila, "id_producto", 0),
+                self.obtener_valor(fila, "nombre", 1),
+                self.obtener_valor(fila, "codigo", 2),
+                self.obtener_valor(fila, "stock_minimo", 3),
+                self.obtener_valor(fila, "cantidad_actual", 4),
+                self.obtener_valor(fila, "ubicacion", 5),
+            ))
 
-        columnas = ("id", "codigo", "nombre", "stock_minimo", "cantidad", "ubicacion")
-        encabezados = {
-            "id": "ID",
-            "codigo": "Código",
-            "nombre": "Nombre",
-            "stock_minimo": "Stock mín.",
-            "cantidad": "Cantidad",
-            "ubicacion": "Ubicación"
-        }
-        anchos = {"id": 60, "codigo": 120, "nombre": 300, "stock_minimo": 120, "cantidad": 120, "ubicacion": 180}
-
+        columnas = ("id", "nombre", "codigo", "stock_minimo", "cantidad", "ubicacion")
+        encabezados = {"id": "ID", "nombre": "Nombre", "codigo": "Codigo", "stock_minimo": "Stock min.", "cantidad": "Cantidad", "ubicacion": "Ubicacion"}
+        anchos = {"id": 60, "nombre": 250, "codigo": 120, "stock_minimo": 100, "cantidad": 100, "ubicacion": 180}
         self.crear_tabla(self.tab_stock, columnas, encabezados, anchos, datos)
 
     def cargar_ventas(self):
-        datos = self.consulta("""
-            SELECT
-                v.id_venta,
-                v.fecha,
-                v.total,
-                IFNULL(u.nombre, '')
-            FROM venta v
-            LEFT JOIN usuario u ON v.id_usuario = u.id_usuario
-            ORDER BY v.fecha DESC
-        """)
+        datos = []
+        for fila in self.reporte_service.reporte_ventas():
+            datos.append((
+                self.obtener_valor(fila, "id_venta", 0),
+                self.obtener_valor(fila, "fecha", 1),
+                f"${float(self.obtener_valor(fila, 'total', 2, 0)):.2f}",
+                self.obtener_valor(fila, "metodo_pago", 3),
+                self.obtener_valor(fila, "usuario", 4),
+            ))
 
-        columnas = ("id", "fecha", "total", "usuario")
-        encabezados = {"id": "ID", "fecha": "Fecha", "total": "Total", "usuario": "Usuario"}
-        anchos = {"id": 60, "fecha": 220, "total": 120, "usuario": 220}
-
+        columnas = ("id", "fecha", "total", "metodo_pago", "usuario")
+        encabezados = {"id": "ID", "fecha": "Fecha", "total": "Total", "metodo_pago": "Metodo pago", "usuario": "Usuario"}
+        anchos = {"id": 60, "fecha": 220, "total": 120, "metodo_pago": 130, "usuario": 200}
         self.crear_tabla(self.tab_ventas, columnas, encabezados, anchos, datos)
 
     def cargar_productos(self):
-        datos = self.consulta("""
-            SELECT
-                p.id_producto,
-                p.codigo,
-                p.nombre,
-                p.precio,
-                p.stock_minimo
-            FROM producto p
-            ORDER BY p.nombre ASC
-        """)
+        datos = []
+        for fila in self.reporte_service.reporte_productos():
+            datos.append((
+                self.obtener_valor(fila, "id_producto", 0),
+                self.obtener_valor(fila, "codigo", 2),
+                self.obtener_valor(fila, "nombre", 1),
+                f"${float(self.obtener_valor(fila, 'precio', 3, 0)):.2f}",
+                self.obtener_valor(fila, "stock_minimo", 4),
+                self.obtener_valor(fila, "cantidad_actual", 7),
+                self.obtener_valor(fila, "categoria", 9),
+                self.obtener_valor(fila, "proveedor", 10),
+            ))
 
-        columnas = ("id", "codigo", "nombre", "precio", "stock_minimo")
-        encabezados = {"id": "ID", "codigo": "Código", "nombre": "Nombre", "precio": "Precio", "stock_minimo": "Stock mín."}
-        anchos = {"id": 60, "codigo": 120, "nombre": 320, "precio": 120, "stock_minimo": 120}
-
+        columnas = ("id", "codigo", "nombre", "precio", "stock_minimo", "cantidad", "categoria", "proveedor")
+        encabezados = {"id": "ID", "codigo": "Codigo", "nombre": "Nombre", "precio": "Precio", "stock_minimo": "Stock min.", "cantidad": "Cantidad", "categoria": "Categoria", "proveedor": "Proveedor"}
+        anchos = {"id": 60, "codigo": 120, "nombre": 250, "precio": 100, "stock_minimo": 100, "cantidad": 100, "categoria": 150, "proveedor": 150}
         self.crear_tabla(self.tab_productos, columnas, encabezados, anchos, datos)
+
+    def cargar_movimientos(self):
+        datos = []
+        for fila in self.reporte_service.reporte_movimientos():
+            datos.append((
+                self.obtener_valor(fila, "id_movimiento", 0),
+                self.obtener_valor(fila, "producto", 1),
+                self.obtener_valor(fila, "codigo", 2),
+                self.obtener_valor(fila, "tipo_movimiento", 3),
+                self.obtener_valor(fila, "cantidad", 4),
+                self.obtener_valor(fila, "fecha", 5),
+                self.obtener_valor(fila, "usuario", 6),
+                self.obtener_valor(fila, "motivo", 7),
+            ))
+
+        columnas = ("id", "producto", "codigo", "tipo", "cantidad", "fecha", "usuario", "motivo")
+        encabezados = {"id": "ID", "producto": "Producto", "codigo": "Codigo", "tipo": "Tipo", "cantidad": "Cantidad", "fecha": "Fecha", "usuario": "Usuario", "motivo": "Motivo"}
+        anchos = {"id": 60, "producto": 220, "codigo": 100, "tipo": 100, "cantidad": 100, "fecha": 170, "usuario": 160, "motivo": 230}
+        self.crear_tabla(self.tab_movimientos, columnas, encabezados, anchos, datos)
+
+    def cargar_productos_mas_vendidos(self):
+        datos = []
+        for fila in self.reporte_service.reporte_productos_mas_vendidos():
+            datos.append((
+                self.obtener_valor(fila, "id_producto", 0),
+                self.obtener_valor(fila, "codigo", 1),
+                self.obtener_valor(fila, "nombre", 2),
+                self.obtener_valor(fila, "cantidad_vendida", 3, 0),
+                f"${float(self.obtener_valor(fila, 'total_vendido', 4, 0)):.2f}",
+            ))
+
+        columnas = ("id", "codigo", "nombre", "cantidad_vendida", "total_vendido")
+        encabezados = {"id": "ID", "codigo": "Codigo", "nombre": "Nombre", "cantidad_vendida": "Cantidad vendida", "total_vendido": "Total vendido"}
+        anchos = {"id": 60, "codigo": 120, "nombre": 300, "cantidad_vendida": 150, "total_vendido": 150}
+        self.crear_tabla(self.tab_mas_vendidos, columnas, encabezados, anchos, datos)
+
+    def exportar_csv(self, tipo):
+        if tipo == "stock_bajo":
+            datos = self.reporte_service.reporte_stock_bajo()
+            encabezados = ["ID", "Nombre", "Codigo", "Stock minimo", "Cantidad", "Ubicacion"]
+            filas = [[f[0], f[1], f[2], f[3], f[4], f[5]] for f in datos]
+        elif tipo == "ventas":
+            datos = self.reporte_service.reporte_ventas()
+            encabezados = ["ID", "Fecha", "Total", "Metodo pago", "Usuario"]
+            filas = [[f[0], f[1], f[2], f[3], f[4]] for f in datos]
+        else:
+            datos = self.reporte_service.reporte_productos()
+            encabezados = ["ID", "Codigo", "Nombre", "Precio", "Stock minimo", "Cantidad", "Categoria", "Proveedor"]
+            filas = [[f[0], f[2], f[1], f[3], f[4], f[7], f[9], f[10]] for f in datos]
+
+        ruta = filedialog.asksaveasfilename(title="Guardar reporte CSV", defaultextension=".csv", filetypes=[("Archivo CSV", "*.csv")])
+        if not ruta:
+            return
+
+        try:
+            with open(ruta, "w", newline="", encoding="utf-8-sig") as archivo:
+                escritor = csv.writer(archivo)
+                escritor.writerow(encabezados)
+                escritor.writerows(filas)
+            messagebox.showinfo("Exito", "Reporte exportado correctamente.")
+        except Exception as error:
+            messagebox.showerror("Error", f"No se pudo exportar el reporte.\n\nDetalle: {error}")
 
 
 def abrir_reportes(parent=None):
